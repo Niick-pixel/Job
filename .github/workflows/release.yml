@@ -1,9 +1,12 @@
-# Publica una versión OTA al empujar un tag:  git tag v0.2.1 && git push origin v0.2.1
+# Publica una versión OTA de dos formas:
+#   - empujando un tag:   git tag v0.2.1 && git push origin v0.2.1
+#   - desde GitHub:       Actions → Release → Run workflow (crea el tag vX.Y.Z a partir de VERSION)
 # Las instalaciones existentes la detectarán en ≤ 6 h (o al pulsar «Actualizar ahora»).
 name: Release
 on:
   push:
     tags: ["v*.*.*"]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -11,14 +14,26 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
-      - name: El tag debe coincidir con VERSION
-        run: test "v$(cat VERSION)" = "$GITHUB_REF_NAME" || { echo "::error::VERSION=$(cat VERSION) pero el tag es $GITHUB_REF_NAME"; exit 1; }
+      - name: Determinar el tag
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v$(cat VERSION)"
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            test "$TAG" = "$GITHUB_REF_NAME" || { echo "::error::VERSION=$(cat VERSION) pero el tag es $GITHUB_REF_NAME"; exit 1; }
+          elif gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::La release $TAG ya existe: sube VERSION antes de publicar"; exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
       - run: pip install -r requirements.txt cryptography
       - run: cd backend && python -m pytest -q
       - run: cd installer && python -m pytest -q
@@ -28,7 +43,7 @@ jobs:
         run: |
           export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
           python scripts/release.py --out dist \
-            --base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/"
+            --base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${{ steps.tag.outputs.tag }}/"
       - uses: actions/upload-artifact@v4
         with:
           name: release
@@ -74,10 +89,12 @@ jobs:
       - name: Publicar en GitHub Releases
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.build.outputs.tag }}
         run: |
           python3 -c 'import json; print(json.load(open("dist/manifest.json"))["notes"] or "Mejoras y correcciones.")' > notes.md
           # Se crea como borrador y se publica al final: así `latest/download/manifest.json`
           # nunca apunta a una release a medio subir.
-          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --draft \
-            --title "JobTracker AI ${GITHUB_REF_NAME#v}" --notes-file notes.md
-          gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+          # --target: si el tag no existe (publicación desde Actions), se crea en este commit
+          gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --draft --target "$GITHUB_SHA" \
+            --title "JobTracker AI ${TAG#v}" --notes-file notes.md
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest

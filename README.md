@@ -57,7 +57,8 @@ y una versión que no arranca nunca llega a activarse.
 1. **Una sola vez**: `python3 scripts/gen_signing_key.py` → commitea `installer/ota_pubkey.txt` y guarda la
    clave privada como secreto `OTA_SIGNING_KEY` del repo (`gh secret set OTA_SIGNING_KEY`).
 2. Sube `VERSION`, añade la sección en `CHANGELOG.md` (es lo que verá el usuario en «Novedades»).
-3. `git tag vX.Y.Z && git push origin vX.Y.Z`.
+3. `git tag vX.Y.Z && git push origin vX.Y.Z`, o en GitHub: **Actions → Release → Run workflow**
+   (crea el tag a partir de `VERSION`).
 
 Opcional: firma y notarización del `.pkg` con un Developer ID (`PKG_SIGN_IDENTITY`, `NOTARY_PROFILE`
 en `installer/pkg/build_pkg.sh`).
