@@ -8,3 +8,4 @@ data/gmail_token.json
 data/gmail_credentials.json
 .pytest_cache/
 .DS_Store
+dist/

@@ -1,0 +1,3 @@
+# Clave pública Ed25519 (hex) con la que se verifican las actualizaciones OTA.
+# Genérala con:  python3 scripts/gen_signing_key.py
+# Mientras este fichero no tenga clave, las actualizaciones solo se verifican por SHA-256 + HTTPS.

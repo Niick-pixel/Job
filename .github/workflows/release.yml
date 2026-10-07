@@ -1,0 +1,83 @@
+# Publica una versión OTA al empujar un tag:  git tag v0.2.1 && git push origin v0.2.1
+# Las instalaciones existentes la detectarán en ≤ 6 h (o al pulsar «Actualizar ahora»).
+name: Release
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: El tag debe coincidir con VERSION
+        run: test "v$(cat VERSION)" = "$GITHUB_REF_NAME" || { echo "::error::VERSION=$(cat VERSION) pero el tag es $GITHUB_REF_NAME"; exit 1; }
+      - run: pip install -r requirements.txt cryptography
+      - run: cd backend && python -m pytest -q
+      - run: cd installer && python -m pytest -q
+      - name: Construir y firmar la release
+        env:
+          OTA_SIGNING_KEY: ${{ secrets.OTA_SIGNING_KEY }}
+        run: |
+          export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
+          python scripts/release.py --out dist \
+            --base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: dist/
+
+  macos:
+    needs: build
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: release
+          path: dist
+      - name: Construir el .pkg
+        run: installer/pkg/build_pkg.sh dist
+      - name: Probar install.sh en macOS real
+        run: |
+          VERSION="$(cat VERSION)"
+          JOBTRACKER_NO_START=1 bash dist/install.sh --non-interactive \
+            --tarball "dist/jobtracker-ai-$VERSION.tar.gz" --manifest dist/manifest.json
+          ~/.local/bin/jobtracker status
+          test -f "$HOME/Applications/JobTracker AI.app/Contents/Info.plist"
+      - name: Probar servicios con launchd
+        continue-on-error: true  # algunos runners no tienen sesión gráfica (dominio gui/)
+        run: |
+          ~/.local/bin/jobtracker start
+          curl -fsS --retry 60 --retry-connrefused --retry-delay 2 http://127.0.0.1:8000/health
+          ~/.local/bin/jobtracker stop
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pkg
+          path: dist/*.pkg
+
+  publish:
+    needs: [build, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publicar en GitHub Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 -c 'import json; print(json.load(open("dist/manifest.json"))["notes"] or "Mejoras y correcciones.")' > notes.md
+          # Se crea como borrador y se publica al final: así `latest/download/manifest.json`
+          # nunca apunta a una release a medio subir.
+          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --draft \
+            --title "JobTracker AI ${GITHUB_REF_NAME#v}" --notes-file notes.md
+          gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --latest

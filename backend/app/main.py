@@ -8,8 +8,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from .config import VERSION
 from .database import init_db
-from .routers import applications, cv, emails, jobs
+from .routers import applications, cv, emails, jobs, system
 
 
 @asynccontextmanager
@@ -18,14 +19,14 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="JobTracker AI", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="JobTracker AI", version=VERSION, lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:8501", "http://localhost:3000"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
-for r in (cv.router, jobs.router, applications.router, emails.router):
+for r in (cv.router, jobs.router, applications.router, emails.router, system.router):
     app.include_router(r)
 
 

@@ -7,13 +7,69 @@ y clasifica los correos de las empresas en un tablero Kanban.
 
 ![Kanban](docs/kanban.png)
 
-## Arranque rápido (Mac)
+## Instalar en tu Mac (usuarios)
+
+```bash
+curl -fsSL https://github.com/Niick-pixel/Job/releases/latest/download/install.sh | bash
+```
+
+…o descarga `JobTrackerAI-X.Y.Z.pkg` desde [Releases](https://github.com/Niick-pixel/Job/releases) y ábrelo.
+Después, abre **JobTracker AI** desde Spotlight o `~/Applications`.
+
+- No necesita Homebrew ni permisos de administrador: trae su propio Python (vía [uv](https://github.com/astral-sh/uv)).
+- macOS 13+ mostrará el aviso «Ítems en segundo plano añadidos»: son los servicios de la app y el actualizador.
+- Si el `.pkg` no está firmado con un Developer ID: clic derecho → Abrir la primera vez.
+
+```bash
+jobtracker status                 # versión, servicios y actualizaciones pendientes
+jobtracker config api-key         # guarda tu ANTHROPIC_API_KEY (permisos 600)
+jobtracker update | rollback      # actualizar ya / volver a la versión anterior
+jobtracker config auto-update off # desactivar actualizaciones automáticas
+jobtracker config start-at-login on
+jobtracker logs backend           # backend | frontend | updater
+jobtracker uninstall --keep-data
+```
+
+## Actualizaciones OTA
+
+```
+ git tag v0.2.1 && git push origin v0.2.1
+        │
+        ▼  GitHub Actions (.github/workflows/release.yml)
+ tests → tarball reproducible → manifest.json firmado (Ed25519) → .pkg + prueba en macOS real → Release
+        │
+        ▼  cada Mac instalado (LaunchAgent cada 6 h, o botón «Actualizar ahora»)
+ manifest → ¿versión > actual? → firma válida con la clave fijada? → descarga → SHA-256
+   → extrae en versions/X.Y.Z → venv (se reutiliza si requirements.txt no cambió)
+   → health check en puerto aislado → cambio atómico de `current` → reinicio
+   → si /health falla tras reiniciar: rollback automático a la versión anterior
+```
+
+En disco (`~/Library/Application Support/JobTrackerAI`): `versions/` (se conservan 2), `venvs/`,
+`current → versions/X.Y.Z`, y `data/` + `.env`, que **nunca** se tocan al actualizar.
+
+Garantías: no se instala nada sin firma válida (una vez configurada la clave), no hay downgrades
+(un manifiesto viejo firmado se ignora), los paquetes con rutas peligrosas o enlaces se rechazan,
+y una versión que no arranca nunca llega a activarse.
+
+### Publicar una versión (mantenedores)
+
+1. **Una sola vez**: `python3 scripts/gen_signing_key.py` → commitea `installer/ota_pubkey.txt` y guarda la
+   clave privada como secreto `OTA_SIGNING_KEY` del repo (`gh secret set OTA_SIGNING_KEY`).
+2. Sube `VERSION`, añade la sección en `CHANGELOG.md` (es lo que verá el usuario en «Novedades»).
+3. `git tag vX.Y.Z && git push origin vX.Y.Z`.
+
+Opcional: firma y notarización del `.pkg` con un Developer ID (`PKG_SIGN_IDENTITY`, `NOTARY_PROFILE`
+en `installer/pkg/build_pkg.sh`).
+
+## Desarrollo
 
 ```bash
 make setup          # instala Python 3.12 (Homebrew), crea .venv e instala dependencias
 # edita .env y pon tu ANTHROPIC_API_KEY
 make dev            # API → http://localhost:8000/docs · UI → http://localhost:8501
-make test           # tests (no llaman a la API real)
+make test           # tests del backend y del instalador (no llaman a la API real)
+make release        # genera dist/ localmente · make pkg (solo macOS)
 ```
 
 ## Arquitectura
@@ -43,9 +99,17 @@ Job/
 │   │       └── email_sources.py  # bandeja simulada (JSON) o Gmail (OAuth, solo lectura)
 │   └── tests/                    # pytest con un LLM falso
 ├── frontend/streamlit_app.py     # UI: CV · Oferta · Kanban · Correos
+├── installer/
+│   ├── install.sh                # instalador one-liner (uv + Python propio)
+│   ├── jobtracker.py             # CLI, servicios launchd y motor OTA (solo stdlib)
+│   ├── ed25519.py                # verificación de firmas sin dependencias
+│   ├── ota_pubkey.txt            # clave pública fijada
+│   ├── pkg/                      # .pkg para macOS (build_pkg.sh, postinstall)
+│   └── tests/                    # instalación → OTA → manipulación → rollback
+├── scripts/  release.py · gen_signing_key.py · setup_mac.sh
+├── .github/workflows/            # CI + release (tag vX.Y.Z → OTA)
 ├── data/samples/                 # CV, oferta y correos de ejemplo
-├── scripts/setup_mac.sh
-├── requirements.txt · .env.example · Makefile
+├── VERSION · CHANGELOG.md · requirements.txt · .env.example · Makefile
 ```
 
 ### Flujo

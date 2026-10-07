@@ -58,6 +58,20 @@ with st.sidebar:
             st.warning(f"**{a['analysis'].get('company') or a['sender']}**\n\n{a['subject']}"
                        + (f"\n\n🗓 {when}" if when else ""))
 
+    st.divider()
+    sysinfo = call("GET", "/api/system/version") or {}
+    st.caption(f"Versión {sysinfo.get('version', '?')}" + ("" if sysinfo.get("installed") else " · modo desarrollo"))
+    if sysinfo.get("rolled_back_from"):
+        st.caption(f"↩️ Se revirtió la {sysinfo['rolled_back_from']} por un fallo al arrancar")
+    if sysinfo.get("update_available"):
+        st.success(f"⬆️ Nueva versión {sysinfo['latest']} disponible")
+        if sysinfo.get("notes"):
+            with st.expander("Novedades"):
+                st.markdown(sysinfo["notes"])
+        if st.button("Actualizar ahora"):
+            if call("POST", "/api/system/update") is not None:
+                st.info("Actualizando… la app se reiniciará sola en ~1 minuto. Recarga la página después.")
+
 tab_cv, tab_job, tab_board, tab_mail = st.tabs(["📄 Mi CV", "🔍 Analizar oferta", "📋 Kanban", "📬 Correos"])
 
 # ── CV ──────────────────────────────────────────────────────────

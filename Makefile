@@ -1,7 +1,7 @@
 VENV ?= .venv
 PY   := $(VENV)/bin/python
 
-.PHONY: setup backend frontend dev test
+.PHONY: setup backend frontend dev test release pkg
 
 setup:            ## Crea el entorno e instala dependencias (macOS)
 	./scripts/setup_mac.sh
@@ -17,3 +17,10 @@ dev:              ## Backend + frontend a la vez (Ctrl+C para parar ambos)
 
 test:
 	cd backend && ../$(PY) -m pytest -q
+	cd installer && ../$(PY) -m pytest -q
+
+release:          ## Genera dist/ (tarball + manifest firmado si OTA_SIGNING_KEY está definida)
+	$(PY) scripts/release.py --out dist
+
+pkg: release      ## Genera dist/JobTrackerAI-X.Y.Z.pkg (solo en macOS)
+	installer/pkg/build_pkg.sh dist

@@ -1,0 +1,23 @@
+#!/bin/bash
+# postinstall del .pkg: el instalador de macOS lo ejecuta como root.
+# Instala para el usuario que tiene la sesión gráfica abierta, sin permisos de root.
+set -euo pipefail
+DIR="$(cd "$(dirname "$0")" && pwd)"
+USER_NAME="$(stat -f %Su /dev/console)"
+if [ -z "$USER_NAME" ] || [ "$USER_NAME" = "root" ] || [ "$USER_NAME" = "loginwindow" ]; then
+  echo "No hay un usuario con sesión iniciada; abre el instalador desde tu sesión." >&2
+  exit 1
+fi
+USER_ID="$(id -u "$USER_NAME")"
+USER_HOME="$(dscl . -read "/Users/$USER_NAME" NFSHomeDirectory | awk '{print $2}')"
+LOG="/tmp/jobtracker-install.log"
+
+# `launchctl asuser` hace que los LaunchAgents se registren en la sesión del usuario
+launchctl asuser "$USER_ID" sudo -u "$USER_NAME" -H env HOME="$USER_HOME" \
+  /bin/bash "$DIR/install.sh" --non-interactive \
+  --tarball "$DIR/jobtracker-ai.tar.gz" --manifest "$DIR/manifest.json" >"$LOG" 2>&1 || {
+    echo "La instalación falló; revisa $LOG" >&2; exit 1; }
+
+# Abre la app al terminar (la primera vez pedirá la API key mediante notificación)
+launchctl asuser "$USER_ID" sudo -u "$USER_NAME" open "$USER_HOME/Applications/JobTracker AI.app" || true
+exit 0
