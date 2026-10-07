@@ -1,0 +1,24 @@
+Nicolás Ejemplo
+Desarrollador Backend Python · Madrid · nicolas@example.com
+
+RESUMEN
+Desarrollador backend con 4 años de experiencia construyendo APIs y pipelines de datos en Python.
+
+EXPERIENCIA
+Backend Developer — Logistix (2022 - Actualidad)
+- Desarrollé una API REST con Flask y PostgreSQL que procesa 2M de envíos/mes.
+- Migré tareas batch a Celery + Redis, reduciendo el tiempo de procesamiento un 60%.
+- Desplegué servicios en AWS (ECS, RDS) con Docker y GitHub Actions.
+
+Desarrollador Python Junior — DataBits (2020 - 2022)
+- Automaticé informes con Pandas y SQL para el equipo comercial.
+- Mantuve scripts ETL y escribí tests con pytest.
+
+HABILIDADES
+Python, Flask, SQL, PostgreSQL, Docker, AWS, Celery, Redis, Git, pytest, Pandas
+
+IDIOMAS
+Español (nativo), Inglés (B2)
+
+EDUCACIÓN
+Grado en Ingeniería Informática — Universidad Complutense de Madrid

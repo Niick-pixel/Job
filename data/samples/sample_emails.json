@@ -1,0 +1,23 @@
+[
+  {
+    "message_id": "sim-001",
+    "sender": "talento@acmecloud.io",
+    "subject": "Siguiente paso en tu candidatura - Backend Developer",
+    "body": "Hola,\n\nGracias por tu interés en Acme Cloud. Nos ha gustado mucho tu perfil y nos gustaría invitarte a una entrevista técnica de 45 minutos el próximo jueves a las 10:00 (hora de Madrid) por Google Meet. ¿Te viene bien?\n\nUn saludo,\nLaura - Talent Acquisition",
+    "received_at": "2026-10-06T09:12:00Z"
+  },
+  {
+    "message_id": "sim-002",
+    "sender": "no-reply@datanova.com",
+    "subject": "Actualización sobre tu candidatura",
+    "body": "Estimado/a candidato/a,\n\nAgradecemos tu tiempo e interés en DataNova. Tras revisar cuidadosamente tu perfil, hemos decidido continuar con otros candidatos cuyo perfil se ajusta más a las necesidades actuales del puesto. Te deseamos mucho éxito.\n\nEquipo de Personas",
+    "received_at": "2026-10-05T16:40:00Z"
+  },
+  {
+    "message_id": "sim-003",
+    "sender": "jobs@fintechly.com",
+    "subject": "We received your application",
+    "body": "Hi! Thanks for applying to the Python Engineer role at Fintechly. Our team will review your application and get back to you within 2 weeks.",
+    "received_at": "2026-10-04T11:00:00Z"
+  }
+]

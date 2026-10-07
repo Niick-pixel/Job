@@ -1,0 +1,18 @@
+Acme Cloud — Backend Developer (Python) · Madrid (híbrido)
+Publicado hace 2 días · 38 candidatos
+
+Buscamos un/a Backend Developer para nuestro equipo de plataforma.
+
+Requisitos:
+- 3+ años con Python
+- FastAPI o frameworks similares
+- PostgreSQL
+- Docker y Kubernetes
+- Experiencia en AWS
+
+Valorable:
+- Kafka
+- Terraform
+
+Responsabilidades: diseñar APIs, mejorar la observabilidad y participar en guardias.
+Salario: 45.000 - 55.000 € brutos/año
