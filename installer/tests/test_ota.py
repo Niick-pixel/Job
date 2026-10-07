@@ -203,3 +203,16 @@ def test_install_update_tamper_rollback(tmp_path, env):
     assert (app_home / "data" / "keep.txt").exists()
     assert not (app_home / "versions").exists()
     assert not app.exists()
+
+
+def test_shell_scripts_safe_for_macos_bash32():
+    """El bash 3.2 de macOS (sin locale UTF-8) toma el primer byte de «…», «→», etc. como
+    parte del nombre de la variable: "$VAR…" falla con «unbound variable». Usa "${VAR}…"."""
+    import re
+
+    pattern = re.compile(r"\$[A-Za-z_][A-Za-z0-9_]*[^\x00-\x7F]")
+    scripts = [REPO / "installer" / "install.sh", *(REPO / "installer" / "pkg").glob("*.sh"),
+               REPO / "installer" / "pkg" / "postinstall", REPO / "scripts" / "setup_mac.sh"]
+    bad = [f"{s.name}:{i}: {line.strip()}" for s in scripts
+           for i, line in enumerate(s.read_text().splitlines(), 1) if pattern.search(line)]
+    assert not bad, "Variables pegadas a caracteres no ASCII:\n" + "\n".join(bad)

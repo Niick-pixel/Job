@@ -76,7 +76,7 @@ if [ -z "$PY" ] && [ "${JOBTRACKER_NO_UV:-0}" != "1" ]; then
   fi
   if [ -n "$UV" ] && [ -x "$UV" ]; then
     export UV_PYTHON_INSTALL_DIR="$HOME_DIR/python" UV_PYTHON_PREFERENCE=only-managed
-    info "Preparando Python $PYTHON_VERSION…"
+    info "Preparando Python ${PYTHON_VERSION}…"
     "$UV" python install --quiet "$PYTHON_VERSION"
     PY="$("$UV" python find "$PYTHON_VERSION")"
   else
