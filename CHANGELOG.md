@@ -2,6 +2,12 @@
 
 Las notas de cada versión se muestran dentro de la app al ofrecer la actualización.
 
+## 0.2.1
+
+- Las actualizaciones OTA pasan a estar firmadas con Ed25519: a partir de esta versión la app
+  rechaza cualquier actualización que no lleve una firma válida de JobTracker AI.
+- Publicación de versiones desde la pestaña Actions de GitHub.
+
 ## 0.2.0
 
 - Instalador para macOS (`install.sh` y `.pkg`) que no requiere Homebrew ni permisos de administrador.
