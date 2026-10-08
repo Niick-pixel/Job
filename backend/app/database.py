@@ -14,7 +14,15 @@ def init_db() -> None:
     if settings.database_url.startswith("sqlite:///"):
         from pathlib import Path
 
-        Path(settings.database_url.removeprefix("sqlite:///")).parent.mkdir(parents=True, exist_ok=True)
+        from .backups import maybe_backup
+        from .config import VERSION
+
+        db_path = Path(settings.database_url.removeprefix("sqlite:///"))
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            maybe_backup(db_path, VERSION)  # antes de migrar: si algo sale mal, tus datos siguen a salvo
+        except Exception as e:  # noqa: BLE001  (una copia fallida no debe impedir arrancar)
+            print(f"[copia de seguridad] no se pudo hacer: {e}")
     from . import models  # noqa: F401  (registra las tablas)
 
     SQLModel.metadata.create_all(engine)

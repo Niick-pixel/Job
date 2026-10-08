@@ -14,6 +14,7 @@ class ApplicationStatus(str, Enum):
     TO_APPLY = "por_aplicar"
     APPLIED = "aplicado"
     INTERVIEW = "entrevista"
+    OFFER = "oferta"
     REJECTED = "rechazado"
 
 
@@ -79,6 +80,7 @@ class Application(SQLModel, table=True):
     # Las fechas «sin zona» son hora local del usuario (lo que escribe o lo que dice el correo)
     interview_at: datetime | None = None
     follow_up_at: datetime | None = None  # último seguimiento enviado
+    offer: dict = Field(default_factory=dict, sa_column=Column(JSON))  # condiciones de la oferta (ver schemas.OfferDetails)
     updated_at: datetime = Field(default_factory=_now)
 
 
@@ -87,6 +89,16 @@ class InterviewPrep(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     application_id: int = Field(foreign_key="application.id", unique=True)
     content: dict = Field(default_factory=dict, sa_column=Column(JSON))
+    created_at: datetime = Field(default_factory=_now)
+
+
+class MockInterview(SQLModel, table=True):
+    """Simulacro de entrevista terminado: preguntas, respuestas, evaluación y nota media."""
+    id: int | None = Field(default=None, primary_key=True)
+    application_id: int = Field(foreign_key="application.id", index=True)
+    transcript: list = Field(default_factory=list, sa_column=Column(JSON))
+    average: float | None = None
+    summary: str | None = None
     created_at: datetime = Field(default_factory=_now)
 
 
@@ -99,6 +111,8 @@ class EmailEvent(SQLModel, table=True):
     category: str
     confidence: float
     application_id: int | None = Field(default=None, foreign_key="application.id")
+    thread_id: str | None = None        # hilo de Gmail (para responder dentro del hilo)
+    rfc_message_id: str | None = None   # cabecera Message-ID (In-Reply-To al responder)
     analysis: dict = Field(default_factory=dict, sa_column=Column(JSON))
     created_at: datetime = Field(default_factory=_now)
 

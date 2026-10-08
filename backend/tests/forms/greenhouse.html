@@ -1,0 +1,20 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Greenhouse-like</title></head><body>
+<h1>Platform Engineer · Orbit</h1>
+<form id="application-form" action="/submit-application" method="post">
+  <div class="field"><label for="first_name">First Name *</label><input id="first_name" name="first_name" required></div>
+  <div class="field"><label for="last_name">Last Name *</label><input id="last_name" name="last_name" required></div>
+  <div class="field"><label for="email">Email *</label><input id="email" name="email" type="text" required></div>
+  <div class="field"><label for="phone">Phone</label><input id="phone" name="phone"></div>
+  <div class="field"><label for="resume">Resume/CV *</label><input id="resume" name="resume" type="file" style="display:none"><button type="button">Attach</button></div>
+  <div class="field"><label for="cover_letter">Cover Letter</label><input id="cover_letter" name="cover_letter" type="file" style="display:none"></div>
+  <div class="field"><label for="q1">LinkedIn Profile</label><input id="q1" name="question_1"></div>
+  <div class="field"><label for="q2">What are your salary expectations? *</label><input id="q2" name="question_2" required></div>
+  <div class="field"><label for="q3">Why do you want to work at Orbit? *</label><textarea id="q3" name="question_3" required></textarea></div>
+  <div class="field"><label for="q4">Describe your experience running Kubernetes in production *</label><textarea id="q4" name="question_4" required></textarea></div>
+  <fieldset><legend>Will you now or in the future require sponsorship? *</legend>
+    <label><input type="radio" name="q5" value="1" required> Yes</label><label><input type="radio" name="q5" value="0"> No</label></fieldset>
+  <div class="field"><label for="gender">Gender</label><select id="gender" name="gender"><option value="">Select…</option><option>Male</option><option>Female</option></select></div>
+  <div class="field"><label for="pre">Preferred name</label><input id="pre" name="preferred" value="Ya escrito"></div>
+  <input type="hidden" name="token" value="x">
+  <button type="submit">Submit Application</button>
+</form></body></html>

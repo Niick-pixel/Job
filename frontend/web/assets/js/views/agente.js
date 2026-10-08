@@ -67,11 +67,12 @@ function preferencesForm(p, root, ctx) {
     country: h("input", { class: "input", value: src.adzuna_country || "es", maxlength: 2 }),
     alerts: toggle(src.email_alerts),
     digest: toggle(p.digest_enabled ?? true),
+    reminders: toggle(p.interview_reminders ?? true),
     digestHour: h("select", { class: "input", style: { width: "auto" } },
       Array.from({ length: 24 }, (_, i) => h("option", { value: i, selected: i === (p.digest_hour ?? 9) }, `${String(i).padStart(2, "0")}:00`))),
   };
   const row = (label, hint, ctrl) => h("div", { class: "row between", style: { padding: "10px 0" } },
-    h("div", {}, h("p", { style: { fontWeight: 550 } }, label), hint ? h("p", { class: "faint small" }, hint) : null), ctrl);
+    h("div", { style: { flex: "1 1 220px", minWidth: 0 } }, h("p", { style: { fontWeight: 550 } }, label), hint ? h("p", { class: "faint small" }, hint) : null), ctrl);
 
   const collect = () => ({
     ...p, enabled: f.enabled.input.checked, target_titles: f.titles.value, exclude_keywords: f.exclude.value,
@@ -80,6 +81,7 @@ function preferencesForm(p, root, ctx) {
     max_age_days: Number(f.maxAge.value) || 30, triage_threshold: f.triage.value, prepare_threshold: f.prepare.value,
     deep_match_top_n: Number(f.topN.value) || 10,
     digest_enabled: f.digest.input.checked, digest_hour: Number(f.digestHour.value),
+    interview_reminders: f.reminders.input.checked,
     sources: { ...src, greenhouse: f.greenhouse.value, lever: f.lever.value, ashby: f.ashby.value,
       remotive_queries: f.remotive.value, adzuna_queries: f.adzuna.value,
       adzuna_country: (f.country.value || "es").toLowerCase(), email_alerts: f.alerts.input.checked },
@@ -100,6 +102,7 @@ function preferencesForm(p, root, ctx) {
       row("Agente activado", "Busca y prepara candidaturas en segundo plano", f.enabled),
       row("Resumen diario", "Un aviso cada mañana con entrevistas, candidaturas nuevas y seguimientos pendientes",
         h("div", { class: "row", style: { flexWrap: "nowrap" } }, f.digestHour, f.digest)),
+      row("Aviso antes de cada entrevista", "La víspera a partir de las 18:00 (o el mismo día si la apuntas tarde)", f.reminders),
       h("hr", { class: "divider", style: { margin: "4px 0" } }),
       h("div", { class: "grid-2" },
         field("Puestos objetivo", f.titles, "Vacío = deja que la IA decida con tu CV"),

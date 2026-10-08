@@ -72,3 +72,31 @@ def digest_message(d: dict) -> tuple[str, str] | None:
     if not parts:
         return None
     return "JobTracker AI · Hoy", " · ".join(parts)
+
+
+# ── Aviso la víspera de cada entrevista ─────────────────────────
+
+EVE_HOUR = 18  # a partir de esta hora local se avisa de las entrevistas de mañana
+
+
+def due_reminders(db: Session, now_local: datetime, sent: set[str]) -> list[dict]:
+    """Entrevistas de mañana (a partir de las 18:00) o de hoy aún no avisadas. now_local: hora local con zona."""
+    out = []
+    for app in db.exec(select(Application).where(Application.status == ApplicationStatus.INTERVIEW)).all():
+        at = _aware(app.interview_at)
+        if not at or at <= now_local:
+            continue
+        local = at.astimezone(now_local.tzinfo)
+        days = (local.date() - now_local.date()).days
+        key = f"{app.id}:{at.isoformat()}"
+        if key in sent or not (days == 0 or (days == 1 and now_local.hour >= EVE_HOUR)):
+            continue
+        job = db.get(Job, app.job_id)
+        out.append({"key": key, "application_id": app.id, "company": job.company or job.title,
+                    "title": job.title, "when": local.strftime("%H:%M"), "today": days == 0})
+    return out
+
+
+def reminder_message(r: dict) -> tuple[str, str]:
+    day = "Hoy" if r["today"] else "Mañana"
+    return f"🎤 {day} a las {r['when']}: entrevista", f"{r['company']} · {r['title']} — repasa el dossier en la ficha"

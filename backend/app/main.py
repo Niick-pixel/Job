@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import ROOT_DIR, VERSION
 from .database import init_db
-from .routers import agent, applications, cv, emails, jobs, packages, settings, system
+from .routers import agent, applications, autofill, cv, emails, jobs, packages, settings, stats, system
 
 WEB_DIR = ROOT_DIR / "frontend" / "web"
 CLIENT_HEADER = "x-jobtracker"
@@ -45,8 +45,8 @@ async def require_client_header(request: Request, call_next):
     return response
 
 
-for r in (cv.router, jobs.router, applications.router, emails.router, system.router, agent.router,
-          packages.router, settings.router):
+for r in (cv.router, jobs.router, applications.router, autofill.router, emails.router, system.router, agent.router,
+          packages.router, settings.router, stats.router):
     app.include_router(r)
 
 if WEB_DIR.exists():

@@ -27,6 +27,11 @@ Fuentes ──► duplicados ──► filtros duros ──► criba rápida ─
 - **Descubre empresas**: escribe nombres y encuentra sus portales de Greenhouse, Lever o Ashby (Agente → Dónde busca).
 - **Desde el navegador**: botón «Guardar en JobTracker» para la barra de favoritos (Ajustes → Navegador).
 - **Resumen diario**: notificación cada mañana y tarjeta «Hoy» en la Bandeja.
+- **Rellena formularios por ti**: abre el formulario de Greenhouse, Lever, Ashby u otras webs en Chrome,
+  lo rellena y sube tus documentos. El envío lo haces tú, nunca la app.
+- **Simulacro de entrevista** con puntuación STAR, y **asistente de ofertas** (negociación y comparación).
+- **Resultados**: embudo, respuesta por fuente y por versión de CV; el agente prioriza lo que te funciona.
+- **Tus datos a salvo**: copia de seguridad antes de cada actualización y una semanal (`jobtracker restore-db`).
 - **Entrevistas y seguimiento**: ficha de cada candidatura con fecha de entrevista (a Calendario en un clic),
   dossier de preparación con preguntas probables basadas en tu CV, y correos de seguimiento o agradecimiento
   redactados por la IA que abres en Mail.
@@ -244,11 +249,18 @@ Correo ─Claude─► EmailClassification ─► mueve la tarjeta del Kanban + 
 | POST | `/api/applications/{id}/prep` | Genera el dossier de preparación de la entrevista |
 | POST | `/api/applications/{id}/message` | Redacta `seguimiento` o `agradecimiento` (asunto, cuerpo, destinatario) |
 | POST | `/api/applications/{id}/follow-up-sent` | Marca el seguimiento como enviado |
+| POST · GET | `/api/packages/{id}/autofill` | Abre y rellena el formulario de la oferta (nunca lo envía) · estado |
+| GET · POST | `/api/autofill/browser` | ¿Hay navegador disponible? · descargar Chromium (≈150 MB) |
+| POST | `/api/applications/{id}/mock` | Un paso del simulacro de entrevista (evalúa y pregunta) |
+| PUT | `/api/applications/{id}/offer` | Condiciones de la oferta (mueve la candidatura a «Oferta») |
+| POST | `/api/applications/{id}/negotiate` · `/api/applications/compare-offers` | Negociación · comparación de ofertas |
+| POST | `/api/applications/{id}/gmail-draft` | Borrador en Gmail dentro del hilo de la empresa |
+| GET | `/api/applications/export.csv` | Todas las candidaturas en CSV |
+| GET | `/api/stats` | Resultados: embudo, por fuente, por CV, tiempos, agente |
 | GET | `/capture` | Página de destino del botón del navegador (datos en el `#fragmento`) |
 
 ## Próximos pasos sugeridos
 
-1. **Fase 3**: agente que rellena formularios de Greenhouse/Lever/Ashby (Playwright) con captura antes de enviar.
-2. **Fase 4**: borradores de seguimiento directamente en Gmail y simulacro de entrevista por voz.
-3. Panel de embudo: tasa de respuesta por fuente y por versión de CV.
-4. Migraciones con Alembic si se pasa a PostgreSQL.
+1. Simulacro de entrevista por voz (cuando haya reconocimiento de voz local que vaya bien en Macs Intel).
+2. Rellenar formularios en más portales con pasos (Workday, SuccessFactors).
+3. Migraciones con Alembic si se pasa a PostgreSQL.

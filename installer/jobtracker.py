@@ -864,6 +864,36 @@ def cmd_uninstall(args, paths: Paths) -> None:
         print("JobTracker AI desinstalado por completo.")
 
 
+def cmd_restore_db(args, paths: Paths) -> None:
+    """Restaura una copia de data/backups/ (la más reciente si no se indica otra)."""
+    db = paths.data / "jobtracker.db"
+    backups = sorted((paths.data / "backups").glob("jobtracker-*.db"), key=lambda p: p.stat().st_mtime, reverse=True) \
+        if (paths.data / "backups").exists() else []
+    if not backups:
+        raise OTAError("No hay copias de seguridad en data/backups/")
+    if args.list or not args.name and not args.yes:
+        for i, b in enumerate(backups):
+            print(f"{'→' if i == 0 else ' '} {b.name}  ({b.stat().st_size // 1024} KB)")
+        if not args.list:
+            print("\nPara restaurar la más reciente: jobtracker restore-db --yes   (o indica el nombre)")
+        return
+    chosen = next((b for b in backups if b.name == args.name), None) if args.name else backups[0]
+    if not chosen:
+        raise OTAError(f"No existe la copia {args.name}")
+    state = load_state(paths)
+    services = Services(paths, state)
+    was_running = services.running()
+    services.stop()
+    if db.exists():  # por si te arrepientes: la base actual también se guarda
+        shutil.copy2(db, paths.data / "backups" / f"jobtracker-{datetime.now():%Y%m%d-%H%M%S}-antes-de-restaurar.db")
+    for extra in ("-wal", "-shm"):
+        (paths.data / f"jobtracker.db{extra}").unlink(missing_ok=True)
+    shutil.copy2(chosen, db)
+    log(f"✅ Restaurada {chosen.name}")
+    if was_running:
+        services.start()
+
+
 def cmd_version(_args, paths: Paths) -> None:
     print(load_state(paths).get("current") or read_version(CODE_DIR))
 
@@ -910,6 +940,12 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("key", choices=["api-key", "auto-update", "start-at-login"])
     c.add_argument("value", nargs="?")
     c.set_defaults(func=cmd_config)
+
+    rb = sub.add_parser("restore-db", help="lista o restaura las copias de seguridad de tus datos")
+    rb.add_argument("name", nargs="?", help="nombre de la copia (por defecto, la más reciente)")
+    rb.add_argument("--list", action="store_true")
+    rb.add_argument("--yes", action="store_true", help="restaura la más reciente sin preguntar")
+    rb.set_defaults(func=cmd_restore_db)
 
     u = sub.add_parser("uninstall", help="desinstala JobTracker AI")
     u.add_argument("--keep-data", action="store_true", help="conserva data/ y .env")

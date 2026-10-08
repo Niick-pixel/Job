@@ -8,6 +8,7 @@ export const ROUTES = [
   { id: "ofertas", label: "Ofertas", ico: "search" },
   { id: "kanban", label: "Kanban", ico: "board", wide: true },
   { id: "correos", label: "Correos", ico: "mail" },
+  { id: "resultados", label: "Resultados", ico: "chart" },
   { id: "agente", label: "Agente", ico: "bot" },
   { id: "perfil", label: "Perfil", ico: "user" },
 ];
@@ -111,7 +112,7 @@ async function route() {
   }
 }
 
-// ── Atajos: ⌘1…⌘6 secciones, ⌘, ajustes ─────────────────────────
+// ── Atajos: ⌘1…⌘7 secciones, ⌘, ajustes ─────────────────────────
 addEventListener("keydown", (e) => {
   if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
   if (e.key === ",") { e.preventDefault(); ctx.go("ajustes"); return; }

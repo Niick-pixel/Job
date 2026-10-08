@@ -26,6 +26,7 @@ from .job_ingest import analyze_job
 from .llm import LLMClient, LLMError
 from .matcher import evaluate_match
 from .notify import notify
+from .stats import source_weights
 from .sources import RawJob, collect, extract_alert_jobs, is_job_alert
 from .urgency import assess_urgency
 
@@ -258,7 +259,12 @@ def run_agent(
         # 5. Análisis completo de las mejores (encaje + urgencia)
         candidates = [j for j in db.exec(select(Job).where(Job.pipeline_status == PipelineStatus.CANDIDATE.value)).all()
                       if "score" in (j.triage or {})]
-        candidates.sort(key=lambda j: j.triage["score"] * 0.8 + (j.urgency or {}).get("score", 50) * 0.2, reverse=True)
+        # Las fuentes que más respuestas te consiguen pesan algo más (±10 %, solo con datos suficientes)
+        weights = source_weights(db)
+        candidates.sort(key=lambda j: (j.triage["score"] * 0.8 + (j.urgency or {}).get("score", 50) * 0.2)
+                        * weights.get(j.source, 1.0), reverse=True)
+        if weights:
+            stats["pesos_fuentes"] = weights
         for job in candidates[: prefs.deep_match_top_n]:
             _deep_analyze(db, llm, settings, job, cv_row, cv, prefs, stats, prepare)
         run.status = "ok"

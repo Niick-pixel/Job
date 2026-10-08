@@ -1,0 +1,19 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Ashby-like</title></head><body>
+<div id="root"></div>
+<script>
+// Formulario controlado al estilo React: el valor solo «cuenta» si llega el evento input
+const state = {};
+const root = document.getElementById("root");
+const q = (label, name, tag = "input", extra = "") => `<div class="_fieldEntry"><div><label class="_label">${label}</label></div>
+  <div><${tag} name="${name}" aria-required="${label.includes("*")}" ${extra}></${tag}></div></div>`;
+root.innerHTML = `<form>
+  ${q("Nombre *", "_systemfield_name")}
+  ${q("Correo electrónico *", "_systemfield_email", "input", 'type="email"')}
+  ${q("Ubicación", "_systemfield_location")}
+  ${q("Nivel de inglés", "english", "select")}
+  <div class="_fieldEntry"><label class="_label">Currículum *</label><input type="file" name="_systemfield_resume"></div>
+  <button type="submit">Enviar candidatura</button></form>`;
+root.querySelector("select").innerHTML = '<option value="">—</option><option value="b2">B2</option><option value="c1">C1 (avanzado)</option>';
+root.querySelectorAll("input,textarea,select").forEach((el) => el.addEventListener("input", () => { state[el.name] = el.value; }));
+window.reactState = state;
+</script></body></html>

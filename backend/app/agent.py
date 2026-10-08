@@ -39,7 +39,7 @@ def run_once(trigger: str = "schedule", llm=None) -> AgentRun:
     with agent_lock(), Session(engine) as db:
         return run_agent(
             db, llm or get_llm(), settings, trigger=trigger,
-            email_loader=lambda: fetch_emails(settings), prepare=prepare_package,
+            email_loader=lambda: fetch_emails(settings, interactive=False), prepare=prepare_package,
         )
 
 

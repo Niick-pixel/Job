@@ -1,0 +1,15 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Lever-like</title></head><body>
+<form method="post" action="/apply">
+  <ul>
+    <li class="application-question"><label><div class="application-label">Resume/CV ✱</div><input type="file" name="resume"></label></li>
+    <li class="application-question"><label><div class="application-label">Full name ✱</div><input type="text" name="name" required></label></li>
+    <li class="application-question"><label><div class="application-label">Email ✱</div><input type="email" name="email" required></label></li>
+    <li class="application-question"><label><div class="application-label">Phone</div><input type="text" name="phone"></label></li>
+    <li class="application-question"><label><div class="application-label">Current company</div><input type="text" name="org"></label></li>
+    <li class="application-question"><label><div class="application-label">LinkedIn URL</div><input type="text" name="urls[LinkedIn]"></label></li>
+    <li class="application-question"><label><div class="application-label">GitHub URL</div><input type="text" name="urls[GitHub]"></label></li>
+    <li class="application-question"><label><div class="application-label">¿Cuándo podrías incorporarte?</div><input type="text" name="cards[0][field0]"></label></li>
+    <li class="application-question"><label><div class="application-label">Additional information</div><textarea name="comments"></textarea></label></li>
+  </ul>
+  <button type="submit">Submit application</button>
+</form></body></html>

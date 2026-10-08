@@ -7,13 +7,16 @@ const COLUMNS = [
   { id: "por_aplicar", label: "Por aplicar", dot: "" },
   { id: "aplicado", label: "Aplicado", dot: "ok" },
   { id: "entrevista", label: "Entrevista", dot: "warn" },
+  { id: "oferta", label: "Oferta", dot: "ok" },
   { id: "rechazado", label: "Rechazado", dot: "bad" },
 ];
 
 export async function render(root, ctx) {
   const board = await api.get("/api/applications/board");
   const total = Object.values(board).reduce((n, c) => n + c.length, 0);
-  const head = pageHead("Kanban", total ? `${total} candidatura${total > 1 ? "s" : ""} en seguimiento` : null);
+  const head = pageHead("Kanban", total ? `${total} candidatura${total > 1 ? "s" : ""} en seguimiento` : null,
+    total ? h("a", { class: "btn sm", href: "/api/applications/export.csv", download: "", title: "Para Excel o Numbers: útil como registro de búsqueda activa" },
+      icon("download"), h("span", {}, "Exportar CSV")) : null);
   if (!total) {
     root.replaceChildren(head, empty("board", "Sin candidaturas todavía",
       "Cuando apruebes una candidatura en la Bandeja o prepares una oferta, aparecerá aquí."));

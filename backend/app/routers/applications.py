@@ -1,16 +1,22 @@
+import csv
+import io
 import subprocess
 import sys
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
+from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 
-from ..config import DATA_DIR
+from ..config import DATA_DIR, get_settings
 from ..database import get_session
-from ..models import Application, ApplicationStatus, CVProfile, EmailEvent, InterviewPrep, Job, MatchResult
-from ..schemas import ApplicationRead, ApplicationUpdate, CVExtraction, JobExtraction, MessageIn
-from ..services.interviews import build_ics, contact_from_senders, draft_message, prepare_interview
+from ..models import Application, ApplicationStatus, CVProfile, EmailEvent, InterviewPrep, Job, MatchResult, MockInterview
+from ..schemas import (ApplicationRead, ApplicationUpdate, CVExtraction, GmailDraftIn, JobExtraction, MessageIn, MockIn,
+                       MockTurn, NegotiateIn, OfferDetails)
+from ..services import email_sources
+from ..services.interviews import (build_ics, compare_offers, contact_from_senders, draft_message, mock_step, negotiate,
+                                   prepare_interview)
 from ..services.llm import LLMClient, LLMError, get_llm
 from ..timeutil import to_utc
 
@@ -56,6 +62,32 @@ def board(db: Session = Depends(get_session)):
     for app in db.exec(select(Application)).all():
         columns[app.status].append(to_read(db, app))
     return columns
+
+
+STATUS_LABEL = {"por_aplicar": "Por aplicar", "aplicado": "Aplicado", "entrevista": "Entrevista",
+                "oferta": "Oferta", "rechazado": "Rechazado"}
+
+
+@router.get("/export.csv")
+def export_csv(db: Session = Depends(get_session)):
+    """Todas las candidaturas en CSV (se abre directamente en Excel o Numbers)."""
+    def local(dt):
+        return to_utc(dt).astimezone().strftime("%Y-%m-%d %H:%M") if dt else ""
+
+    buf = io.StringIO()
+    w = csv.writer(buf, delimiter=";")  # Excel en español espera «;»
+    w.writerow(["Empresa", "Puesto", "Estado", "Encaje %", "Fuente", "Ubicación", "Enlace", "Fecha de aplicación",
+                "Entrevista", "Último seguimiento", "Notas", "Añadida"])
+    for app in db.exec(select(Application).order_by(Application.updated_at.desc())).all():
+        job = db.get(Job, app.job_id)
+        r = to_read(db, app)
+        w.writerow([job.company or "", job.title, STATUS_LABEL.get(app.status.value, app.status.value),
+                    round(r.match_score) if r.match_score is not None else "", job.source, job.location or "",
+                    job.source_url or job.apply_url or "", local(app.applied_at), local(app.interview_at),
+                    local(app.follow_up_at), (app.notes or "").replace("\n", " "), local(job.created_at)])
+    name = f"candidaturas-{datetime.now():%Y-%m-%d}.csv"
+    return Response("\ufeff" + buf.getvalue(), media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
 
 @router.patch("/{app_id}", response_model=ApplicationRead)
@@ -124,6 +156,12 @@ def detail(app_id: int, db: Session = Depends(get_session)):
                     "summary": (e.analysis or {}).get("summary")} for e in emails],
         "contact": contact_from_senders([e.sender for e in emails]),
         "prep": prep.content if prep else None,
+        "offer": app.offer or None,
+        "other_offers": len([a for a in db.exec(select(Application).where(Application.status == ApplicationStatus.OFFER)).all()
+                             if a.id != app.id and a.offer]),
+        "gmail": get_settings().email_mode == "gmail" and get_settings().gmail_token_file.exists(),
+        "mocks": [{"average": m.average, "created_at": m.created_at} for m in db.exec(
+            select(MockInterview).where(MockInterview.application_id == app_id).order_by(MockInterview.created_at)).all()],
         "days_since_applied": (now - applied).days if applied else None,
         "suggest_follow_up": bool(app.status == ApplicationStatus.APPLIED and applied and (now - applied).days >= 7
                                   and not [e for e in emails if e.category != "confirmacion_recepcion"]),
@@ -198,3 +236,113 @@ def follow_up_sent(app_id: int, db: Session = Depends(get_session)):
     db.add(app)
     db.commit()
     return {"follow_up_at": app.follow_up_at}
+
+
+@router.post("/{app_id}/mock")
+def mock(app_id: int, payload: MockIn, db: Session = Depends(get_session), llm: LLMClient = Depends(get_llm)):
+    """Un paso del simulacro: evalúa la respuesta y hace la siguiente pregunta. Al terminar, se guarda."""
+    app, job = _get(db, app_id)
+    prep = db.exec(select(InterviewPrep).where(InterviewPrep.application_id == app_id)).first()
+    try:
+        step = mock_step(llm, _cv(db), job.title, job.company, job.raw_text, prep.content if prep else None,
+                         payload.history, payload.current_question, payload.answer, payload.total, payload.finish)
+    except LLMError as e:
+        raise HTTPException(502, str(e)) from e
+    out = step.model_dump()
+    if step.next_question is None:
+        turns = list(payload.history)
+        if payload.current_question and payload.answer:
+            turns.append(MockTurn(question=payload.current_question, answer=payload.answer, feedback=step.feedback))
+        scores = [t.feedback.score for t in turns if t.feedback]
+        if turns:
+            session = MockInterview(application_id=app_id, transcript=[t.model_dump() for t in turns],
+                                    average=round(sum(scores) / len(scores), 1) if scores else None, summary=step.summary)
+            db.add(session)
+            db.commit()
+            out["saved_id"] = session.id
+            out["average"] = session.average
+    return out
+
+
+@router.get("/{app_id}/mocks")
+def mocks(app_id: int, db: Session = Depends(get_session)):
+    _get(db, app_id)
+    rows = db.exec(select(MockInterview).where(MockInterview.application_id == app_id)
+                   .order_by(MockInterview.created_at)).all()
+    return [{"id": m.id, "created_at": m.created_at, "average": m.average, "questions": len(m.transcript),
+             "summary": m.summary} for m in rows]
+
+
+# ── Ofertas ─────────────────────────────────────────────────────
+
+
+@router.put("/{app_id}/offer")
+def save_offer(app_id: int, payload: OfferDetails, db: Session = Depends(get_session)):
+    """Apunta las condiciones de una oferta (y mueve la candidatura a «Oferta»)."""
+    app, _ = _get(db, app_id)
+    app.offer = payload.model_dump(exclude_none=True)
+    if app.status != ApplicationStatus.OFFER:
+        apply_status(app, ApplicationStatus.OFFER)
+    db.add(app)
+    db.commit()
+    return app.offer
+
+
+@router.post("/{app_id}/negotiate")
+def negotiation(app_id: int, payload: NegotiateIn, db: Session = Depends(get_session), llm: LLMClient = Depends(get_llm)):
+    app, job = _get(db, app_id)
+    if not app.offer:
+        raise HTTPException(409, "Apunta primero las condiciones de la oferta")
+    try:
+        out = negotiate(llm, _cv(db), job.title, job.company, job.raw_text, app.offer, payload.target, payload.priorities)
+    except LLMError as e:
+        raise HTTPException(502, str(e)) from e
+    return {**out.model_dump(), "to": contact_from_senders([e.sender for e in _emails(db, app_id)])}
+
+
+class CompareIn(BaseModel):
+    application_ids: list[int] = Field(default_factory=list, max_length=6)
+    priorities: list[str] = Field(default_factory=list, max_length=8)
+
+
+@router.post("/compare-offers")
+def compare(payload: CompareIn, db: Session = Depends(get_session), llm: LLMClient = Depends(get_llm)):
+    apps = [a for a in db.exec(select(Application).where(Application.status == ApplicationStatus.OFFER)).all() if a.offer]
+    if payload.application_ids:
+        apps = [a for a in apps if a.id in payload.application_ids]
+    if len(apps) < 2:
+        raise HTTPException(409, "Hacen falta al menos dos ofertas con sus condiciones apuntadas")
+    offers = []
+    for a in apps:
+        job = db.get(Job, a.job_id)
+        o = OfferDetails.model_validate(a.offer)
+        offers.append({"application_id": a.id, "title": job.title, "company": job.company, "offer": a.offer,
+                       "total": (o.base_salary or 0) + (o.variable or 0) or None, "currency": o.currency})
+    try:
+        result = compare_offers(llm, _cv(db), offers, payload.priorities)
+    except LLMError as e:
+        raise HTTPException(502, str(e)) from e
+    by_id = {x.application_id: x for x in result.offers}
+    return {"offers": [{**o, **(by_id[o["application_id"]].model_dump() if o["application_id"] in by_id else {})} for o in offers],
+            "recommendation": result.recommendation, "questions_to_clarify": result.questions_to_clarify}
+
+
+# ── Gmail: borrador dentro del hilo de la empresa ──────────────
+
+
+@router.post("/{app_id}/gmail-draft")
+def gmail_draft(app_id: int, payload: GmailDraftIn, db: Session = Depends(get_session)):
+    """Deja el correo como borrador en Gmail (respuesta en el hilo de la empresa si lo hay). No se envía."""
+    settings = get_settings()
+    if settings.email_mode != "gmail":
+        raise HTTPException(409, "Conecta Gmail en Ajustes para crear borradores")
+    _get(db, app_id)
+    emails = [e for e in _emails(db, app_id) if e.thread_id]
+    ref = next((e for e in emails if email_sources.same_address(e.sender, payload.to)), None) or (emails[0] if emails else None)
+    try:
+        return email_sources.create_draft(settings, payload.to, payload.subject, payload.body,
+                                          thread_id=ref.thread_id if ref else None,
+                                          in_reply_to=ref.rfc_message_id if ref else None,
+                                          reply_subject=ref.subject if ref else None)
+    except Exception as e:  # noqa: BLE001  (permisos, red…)
+        raise HTTPException(502, f"Gmail no ha aceptado el borrador: {e}") from e

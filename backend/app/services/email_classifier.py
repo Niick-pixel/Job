@@ -17,7 +17,7 @@ Extrae la fecha/hora de entrevista si se propone una concreta (interpreta fechas
 # Qué estado del Kanban implica cada categoría (None = no mover la tarjeta)
 CATEGORY_TO_STATUS: dict[str, ApplicationStatus | None] = {
     "entrevista": ApplicationStatus.INTERVIEW,
-    "oferta": ApplicationStatus.INTERVIEW,
+    "oferta": ApplicationStatus.OFFER,
     "rechazo": ApplicationStatus.REJECTED,
     "confirmacion_recepcion": ApplicationStatus.APPLIED,
     "solicitud_info": None,

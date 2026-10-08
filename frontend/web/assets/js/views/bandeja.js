@@ -1,6 +1,7 @@
 // 📥 Bandeja: candidaturas preparadas por el agente, listas para aprobar.
 import { api } from "../api.js";
 import { animateOut, button, empty, fmtDate, h, icon, list, pageHead, ring, skeletons, stagger, toast, urgencyChip } from "../ui.js";
+import { autofillButton } from "../autofill.js";
 import { openApplication } from "../detail.js";
 import { agentButton, linkButton, setupBanner, sourceLabel } from "./_shared.js";
 
@@ -38,7 +39,7 @@ function todayCard(d, ctx, reload) {
   if (!d || (!d.interviews.length && !d.stale.length && !d.approved_unsent)) return null;
   const when = (iso) => new Date(iso).toLocaleString("es-ES", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
   const item = (ico, kind, main, sub, action) => h("button", {
-    type: "button", class: "btn ghost", style: { width: "100%", justifyContent: "flex-start", height: "auto", padding: "8px 10px", textAlign: "left" },
+    type: "button", class: "btn ghost", style: { width: "100%", justifyContent: "flex-start", height: "auto", padding: "8px 10px", textAlign: "left", whiteSpace: "normal" },
     onClick: typeof action === "function" ? action : () => ctx.go(action),
   }, h("span", { class: `chip ${kind}`, style: { width: "30px", justifyContent: "center", padding: 0 } }, icon(ico)),
   h("span", { style: { flex: 1, minWidth: 0 } }, h("b", {}, main), h("span", { class: "muted" }, ` · ${sub}`)));
@@ -116,15 +117,21 @@ function packageCard(pkg, ctx, onGone) {
       button("Cancelar", { kind: "ghost", onClick: () => { discardPanel.hidden = true; } })));
   reasonInput.style.flex = "1";
 
+  const fillBtn = job.apply_url ? autofillButton(pkg, { getLetter: () => letter.value, onSent: async () => {
+    await animateOut(card);
+    ctx.refreshCounts();
+    onGone();
+  } }) : null;
   const actions = h("div", { class: "row", style: { marginTop: "18px" } },
     h("a", { class: "btn sm", href: `/api/packages/${pkg.id}/cv.pdf`, download: "" }, icon("download"), h("span", {}, "CV adaptado")),
     job.apply_url ? linkButton("Abrir oferta", job.apply_url) : null,
+    fillBtn,
     h("span", { class: "spacer" }),
     button("", { kind: "ghost", size: "sm", ico: "trash", title: "Descartar…", onClick: () => { discardPanel.hidden = !discardPanel.hidden; if (!discardPanel.hidden) reasonInput.focus(); } }),
     button("Ya la envié", { size: "sm", ico: "send", onClick: () => decide("enviada") }),
     button("Aprobar", { kind: "primary", size: "sm", ico: "check", onClick: () => decide("aprobada") }));
 
-  card.append(header, summary || "", fit || "", details, actions, discardPanel);
+  card.append(header, summary || "", fit || "", details, actions, fillBtn?.panel || "", discardPanel);
   return card;
 }
 
@@ -132,15 +139,19 @@ function renderApproved(slot, approved) {
   if (!approved.length) return;
   const rows = h("div", { class: "card flat", style: { padding: "6px 8px" } });
   for (const pkg of approved) {
-    const row = h("div", { class: "row", style: { padding: "10px 8px", borderBottom: "1px solid var(--border)" } },
+    const fill = pkg.job.apply_url ? autofillButton(pkg, { kind: "primary", onSent: () => animateOut(wrap) }) : null;
+    const row = h("div", { class: "row", style: { padding: "10px 8px" } },
       h("div", { style: { flex: 1, minWidth: 0 } }, h("b", {}, pkg.job.title), h("span", { class: "muted" }, ` · ${pkg.job.company || ""}`)),
-      pkg.job.apply_url ? linkButton("Aplicar", pkg.job.apply_url) : null,
+      pkg.job.apply_url ? linkButton("Abrir", pkg.job.apply_url) : null,
+      fill,
       button("Enviada", { size: "sm", ico: "send", onClick: async () => {
         await api.post(`/api/packages/${pkg.id}/decision`, { decision: "enviada" });
         toast("Marcada como enviada");
-        await animateOut(row);
+        await animateOut(wrap);
       } }));
-    rows.append(row);
+    const wrap = h("div", { style: { borderBottom: "1px solid var(--border)" } }, row,
+      fill ? h("div", { style: { padding: "0 8px" } }, fill.panel) : null);
+    rows.append(wrap);
   }
   rows.lastElementChild.style.borderBottom = "0";
   slot.replaceChildren(h("h2", { class: "section-title" }, "Aprobadas · pendientes de enviar"), rows);

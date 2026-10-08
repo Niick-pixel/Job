@@ -176,12 +176,108 @@ class MessageIn(BaseModel):
     kind: Literal["seguimiento", "agradecimiento"]
 
 
+# ── Simulacro de entrevista (0.7.0) ────────────────────────────
+
+
+class StarCheck(BaseModel):
+    situation: bool = Field(description="Sitúa el contexto")
+    task: bool = Field(description="Explica su responsabilidad o el reto")
+    action: bool = Field(description="Detalla lo que hizo él/ella (no el equipo)")
+    result: bool = Field(description="Da un resultado concreto, idealmente medible")
+
+
+class MockFeedback(BaseModel):
+    score: int = Field(ge=1, le=5, description="1 = floja, 3 = correcta, 5 = excelente")
+    star: StarCheck | None = Field(None, description="Solo en preguntas de comportamiento/experiencia; null en técnicas")
+    strengths: list[str] = Field(description="1-3 cosas que hizo bien")
+    improve: list[str] = Field(description="1-3 mejoras concretas")
+    better_answer: str = Field(description="Versión mejorada, breve, usando SOLO hechos de su respuesta y de su CV")
+
+
+class MockStep(BaseModel):
+    feedback: MockFeedback | None = Field(None, description="Evaluación de la última respuesta (null al empezar)")
+    next_question: str | None = Field(None, description="Siguiente pregunta; null si la entrevista termina")
+    question_kind: Literal["comportamiento", "técnica", "motivación", "repregunta"] | None = None
+    summary: str | None = Field(None, description="Solo al terminar: valoración global y 3 prioridades para mejorar")
+
+
+class MockTurn(BaseModel):
+    question: str
+    answer: str = Field(max_length=6000)
+    feedback: MockFeedback | None = None
+
+
+class MockIn(BaseModel):
+    history: list[MockTurn] = Field(default_factory=list, max_length=20)
+    current_question: str | None = None
+    answer: str | None = Field(None, max_length=6000)
+    finish: bool = False
+    total: int = Field(6, ge=3, le=12)
+
+
 class EmailIn(BaseModel):
     message_id: str
     sender: str
     subject: str
     body: str
     received_at: datetime | None = None
+    thread_id: str | None = None
+    rfc_message_id: str | None = None
+
+
+# ── Ofertas y negociación (0.7.0) ──────────────────────────────
+
+
+class OfferDetails(BaseModel):
+    base_salary: float | None = Field(None, ge=0, description="Salario fijo bruto anual")
+    variable: float | None = Field(None, ge=0, description="Variable/bonus anual bruto esperado")
+    currency: str = "EUR"
+    equity: str | None = None
+    modality: str | None = None
+    vacation_days: int | None = Field(None, ge=0, le=60)
+    start_date: str | None = None
+    deadline: str | None = None
+    benefits: str | None = None
+    notes: str | None = None
+
+
+class NegotiationAsk(BaseModel):
+    item: str = Field(description="Qué se pide (salario, variable, teletrabajo, fecha, formación…)")
+    ask: str = Field(description="La petición concreta")
+    rationale: str = Field(description="Argumento basado en el CV, la oferta o el mercado (sin inventar datos)")
+
+
+class NegotiationOut(BaseModel):
+    assessment: str = Field(description="Valoración honesta de la oferta frente al puesto, el perfil y el mercado")
+    leverage: list[str] = Field(description="Puntos fuertes reales del candidato para negociar")
+    asks: list[NegotiationAsk]
+    risks: list[str] = Field(description="Riesgos y cómo no tensar la relación")
+    call_script: list[str] = Field(description="Guion breve si la negociación es por teléfono")
+    email: MessageDraft
+
+
+class NegotiateIn(BaseModel):
+    target: str | None = Field(None, max_length=200, description="Lo que te gustaría conseguir")
+    priorities: list[str] = Field(default_factory=list, max_length=8)
+
+
+class OfferScore(BaseModel):
+    application_id: int
+    pros: list[str]
+    cons: list[str]
+    score: int = Field(ge=1, le=10)
+
+
+class OfferComparison(BaseModel):
+    offers: list[OfferScore]
+    recommendation: str
+    questions_to_clarify: list[str]
+
+
+class GmailDraftIn(BaseModel):
+    to: str = Field(max_length=300)
+    subject: str = Field(max_length=300)
+    body: str = Field(max_length=20_000)
 
 
 # ── Agente de búsqueda (Fase 1) ────────────────────────────────
@@ -213,6 +309,7 @@ class SearchPreferences(BaseModel):
     max_triage_per_run: int = 150
     digest_enabled: bool = True
     digest_hour: int = Field(9, ge=0, le=23, description="Hora local del resumen diario")
+    interview_reminders: bool = True
     sources: SourcesConfig = Field(default_factory=SourcesConfig)
 
 

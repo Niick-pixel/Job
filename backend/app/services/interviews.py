@@ -9,7 +9,8 @@ import re
 from datetime import datetime, timedelta, timezone
 from email.utils import parseaddr
 
-from ..schemas import CVExtraction, InterviewPrepOut, JobExtraction, MessageDraft
+from ..schemas import (CVExtraction, InterviewPrepOut, JobExtraction, MessageDraft, MockStep, MockTurn, NegotiationOut,
+                       OfferComparison, OfferDetails)
 from .llm import LLMClient
 
 # ── Calendario ──────────────────────────────────────────────────
@@ -118,3 +119,97 @@ def draft_message(llm: LLMClient, kind: str, cv: CVExtraction, job_title: str, c
         prompt=f"{instruction}\n\n<contexto>\n{context}</contexto>\n\n<cv_resumen>\n{cv.full_name or ''}\n{cv.summary}\n</cv_resumen>",
         schema=MessageDraft, effort="low", max_tokens=3000,
     )
+
+
+# ── Simulacro de entrevista ─────────────────────────────────────
+
+MOCK_SYSTEM = """Eres un entrevistador profesional que hace un simulacro de entrevista para un puesto concreto,
+y a la vez un coach que evalúa cada respuesta.
+Reglas:
+- Una pregunta cada vez, como en una entrevista real. Mezcla comportamiento (método STAR), técnica del
+  puesto y motivación. Si la última respuesta fue vaga, puedes hacer UNA repregunta para profundizar.
+- Evalúa con exigencia pero con tacto. En preguntas de comportamiento revisa STAR (situación, tarea,
+  acción propia, resultado concreto). En técnicas, corrección y claridad.
+- La «respuesta mejorada» usa SOLO hechos de la respuesta del candidato y de su CV: no inventes cifras,
+  empresas ni logros. Si falta un dato (p. ej. un resultado medible), indícalo entre corchetes: [cifra].
+- Escribe en el idioma de la oferta. Sé breve: es un ejercicio práctico."""
+
+
+def mock_step(llm: LLMClient, cv: CVExtraction, job_title: str, company: str | None, job_text: str,
+              prep: dict | None, history: list[MockTurn], current_question: str | None, answer: str | None,
+              total: int, finish: bool) -> MockStep:
+    done = len(history) + (1 if answer else 0)
+    if finish or done >= total:
+        instruction = ("Evalúa la última respuesta (si la hay) y TERMINA la entrevista: next_question = null y "
+                       "escribe summary con una valoración global y las 3 prioridades para mejorar.")
+    elif current_question and answer:
+        instruction = (f"Evalúa la última respuesta y haz la pregunta {done + 1} de {total}. "
+                       "No repitas preguntas ya hechas.")
+    else:
+        instruction = f"Empieza la entrevista: saluda en una frase y haz la pregunta 1 de {total} (feedback = null)."
+    likely = "\n".join(f"- {q['question']}" for q in (prep or {}).get("likely_questions", [])[:10])
+    past = "\n\n".join(f"P{i + 1}: {t.question}\nR: {t.answer}" for i, t in enumerate(history))
+    prompt = (
+        f"<puesto>{job_title} en {company or 'la empresa'}</puesto>\n<oferta>\n{job_text[:6000]}\n</oferta>\n"
+        f"<cv>\n{cv.model_dump_json(include={'full_name', 'headline', 'summary', 'experience', 'hard_skills'})}\n</cv>\n"
+        + (f"<preguntas_probables>\n{likely}\n</preguntas_probables>\n" if likely else "")
+        + (f"<entrevista_hasta_ahora>\n{past}\n</entrevista_hasta_ahora>\n" if past else "")
+        + (f"<ultima_pregunta>{current_question}</ultima_pregunta>\n<ultima_respuesta>\n{answer}\n</ultima_respuesta>\n"
+           if current_question and answer else "")
+        + f"\n{instruction}"
+    )
+    step = llm.structured(system=MOCK_SYSTEM, prompt=prompt, schema=MockStep, max_tokens=6000, effort="low",
+                          cache_system=True)
+    if finish or done >= total:
+        step.next_question = None
+    return step
+
+
+# ── Ofertas: negociación y comparación ─────────────────────────
+
+NEGOTIATION_SYSTEM = """Eres un asesor de carrera que ayuda a negociar una oferta de trabajo con honestidad y buen tono.
+Reglas:
+- No inventes ofertas de otras empresas, cifras de mercado exactas ni logros. Si das un rango de mercado,
+  dilo como estimación aproximada y recomienda contrastarlo (p. ej. con portales salariales o personas del sector).
+- Apóyate en hechos del CV y de la oferta. Prioriza 2-4 peticiones realistas; no todo es salario
+  (teletrabajo, fecha de incorporación, formación, revisión salarial a 6 meses…).
+- El correo: cordial, agradecido, concreto, 120-180 palabras, firmado con el nombre del candidato.
+- Escribe en el idioma de la oferta."""
+
+COMPARE_SYSTEM = """Comparas ofertas de trabajo de un candidato de forma clara y honesta.
+Considera dinero total (fijo + variable), modalidad, crecimiento, encaje con su perfil y sus prioridades,
+estabilidad y lo que falte por aclarar. No inventes datos que no estén en las ofertas; si falta algo, dilo."""
+
+
+def offer_text(offer: dict) -> str:
+    o = OfferDetails.model_validate(offer or {})
+    total = (o.base_salary or 0) + (o.variable or 0)
+    lines = [f"Fijo: {o.base_salary:,.0f} {o.currency}" if o.base_salary else None,
+             f"Variable: {o.variable:,.0f} {o.currency}" if o.variable else None,
+             f"Total anual estimado: {total:,.0f} {o.currency}" if total else None,
+             f"Equity: {o.equity}" if o.equity else None, f"Modalidad: {o.modality}" if o.modality else None,
+             f"Vacaciones: {o.vacation_days} días" if o.vacation_days else None,
+             f"Incorporación: {o.start_date}" if o.start_date else None,
+             f"Plazo para responder: {o.deadline}" if o.deadline else None,
+             f"Beneficios: {o.benefits}" if o.benefits else None, f"Notas: {o.notes}" if o.notes else None]
+    return "\n".join(x for x in lines if x) or "Sin condiciones apuntadas"
+
+
+def negotiate(llm: LLMClient, cv: CVExtraction, job_title: str, company: str | None, job_text: str, offer: dict,
+              target: str | None, priorities: list[str]) -> NegotiationOut:
+    prompt = (f"<puesto>{job_title} en {company or 'la empresa'}</puesto>\n<oferta_publicada>\n{job_text[:5000]}\n</oferta_publicada>\n"
+              f"<condiciones_ofrecidas>\n{offer_text(offer)}\n</condiciones_ofrecidas>\n"
+              f"<cv>\n{cv.model_dump_json(include={'full_name', 'headline', 'years_experience', 'seniority', 'summary', 'experience', 'hard_skills', 'location'})}\n</cv>\n"
+              + (f"<objetivo_del_candidato>{target}</objetivo_del_candidato>\n" if target else "")
+              + (f"<prioridades>{', '.join(priorities)}</prioridades>\n" if priorities else "")
+              + "\nPrepara la negociación.")
+    return llm.structured(system=NEGOTIATION_SYSTEM, prompt=prompt, schema=NegotiationOut, max_tokens=8000)
+
+
+def compare_offers(llm: LLMClient, cv: CVExtraction, offers: list[dict], priorities: list[str]) -> OfferComparison:
+    blocks = "\n\n".join(f"<oferta application_id=\"{o['application_id']}\">\n{o['title']} en {o['company'] or '—'}\n"
+                          f"{offer_text(o['offer'])}\n</oferta>" for o in offers)
+    prompt = (f"{blocks}\n\n<perfil>{cv.headline or ''} · {cv.summary}</perfil>\n"
+              + (f"<prioridades>{', '.join(priorities)}</prioridades>\n" if priorities else "")
+              + "\nCompara las ofertas (una entrada por oferta, con su application_id) y recomienda.")
+    return llm.structured(system=COMPARE_SYSTEM, prompt=prompt, schema=OfferComparison, max_tokens=6000)

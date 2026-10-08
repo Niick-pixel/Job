@@ -5,7 +5,7 @@ from sqlmodel import Session, select
 
 from ..config import get_settings
 from ..database import get_session
-from ..models import Application, EmailEvent, Job
+from ..models import Application, ApplicationStatus, EmailEvent, Job
 from ..schemas import EmailClassification, EmailIn
 from ..services.email_classifier import CATEGORY_TO_STATUS, classify_email
 from ..services.email_sources import fetch_emails
@@ -33,6 +33,16 @@ def find_application(db: Session, email: EmailIn, cls: EmailClassification) -> A
     return None
 
 
+# Un correo no devuelve una candidatura a una columna anterior (p. ej. un «hemos recibido tu CV» que llega
+# tarde no saca de «Entrevista»); un rechazo sí se aplica siempre.
+_RANK = {ApplicationStatus.TO_APPLY: 0, ApplicationStatus.APPLIED: 1, ApplicationStatus.INTERVIEW: 2,
+         ApplicationStatus.OFFER: 3, ApplicationStatus.REJECTED: 4}
+
+
+def _moves_forward(current: ApplicationStatus, target: ApplicationStatus) -> bool:
+    return target == ApplicationStatus.REJECTED or _RANK[target] > _RANK[current]
+
+
 def process_email(db: Session, llm: LLMClient, email: EmailIn) -> EmailEvent:
     existing = db.exec(select(EmailEvent).where(EmailEvent.message_id == email.message_id)).first()
     if existing:
@@ -41,7 +51,7 @@ def process_email(db: Session, llm: LLMClient, email: EmailIn) -> EmailEvent:
     cls = classify_email(llm, email)
     app = find_application(db, email, cls)
     target = CATEGORY_TO_STATUS.get(cls.category)
-    if app and target and cls.confidence >= 0.6:
+    if app and target and cls.confidence >= 0.6 and _moves_forward(app.status, target):
         apply_status(app, target)
         if cls.interview_datetime:
             app.interview_at = to_utc(cls.interview_datetime)
@@ -49,6 +59,8 @@ def process_email(db: Session, llm: LLMClient, email: EmailIn) -> EmailEvent:
     if cls.category == "entrevista" and cls.confidence >= 0.6:
         when = cls.interview_datetime.strftime(" · %d/%m %H:%M") if cls.interview_datetime else ""
         notify("🎤 Entrevista detectada", f"{cls.company or email.sender}{when} · prepárala desde la app")
+    if cls.category == "oferta" and cls.confidence >= 0.6:
+        notify("🎉 ¡Oferta recibida!", f"{cls.company or email.sender} · apunta las condiciones y prepara la negociación")
 
     event = EmailEvent(
         message_id=email.message_id,
@@ -58,6 +70,8 @@ def process_email(db: Session, llm: LLMClient, email: EmailIn) -> EmailEvent:
         category=cls.category,
         confidence=cls.confidence,
         application_id=app.id if app else None,
+        thread_id=email.thread_id,
+        rfc_message_id=email.rfc_message_id,
         analysis=cls.model_dump(mode="json"),
     )
     db.add(event)

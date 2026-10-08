@@ -2,6 +2,30 @@
 
 Las notas de cada versión se muestran dentro de la app al ofrecer la actualización.
 
+## 0.7.0
+
+- **Rellenar formularios**: botón «Rellenar formulario» en la Bandeja. Abre el formulario de la oferta
+  (Greenhouse, Lever, Ashby y muchas webs más) en Chrome, rellena tus datos y las respuestas de tu banco,
+  y sube el CV adaptado y la carta. **Nunca pulsa «Enviar»**: lo revisas y lo envías tú. Lo que falta
+  queda marcado en naranja, y las preguntas personales (género, etnia, visados…) se dejan siempre para ti.
+- **Simulacro de entrevista**: la IA hace de entrevistador, una pregunta cada vez, y puntúa cada respuesta
+  con el método STAR, con una versión mejorada basada solo en tu experiencia real. Guarda tu nota media.
+- **Resultados**: nueva sección con tu embudo (enviadas → respuesta → entrevista → oferta), ritmo
+  semanal, qué fuentes y qué versión de tu CV consiguen más respuestas y cuánto tardan las empresas en
+  contestar. El agente da algo más de prioridad (como mucho un 10 %) a las fuentes que mejor te funcionan.
+- **Ofertas**: nueva columna «Oferta» en el Kanban. Apunta las condiciones y la IA te prepara la
+  negociación (qué pedir y con qué argumentos, riesgos, guion para la llamada y el correo). Si tienes
+  varias ofertas, las compara según tus prioridades.
+- **Borradores en Gmail**: con Gmail conectado, los correos de seguimiento, agradecimiento y negociación
+  se dejan como borrador **dentro del hilo de la empresa**. La primera vez Gmail pedirá el permiso de
+  borradores. La app nunca envía correos.
+- **Aviso antes de cada entrevista**: la víspera desde las 18:00, o el mismo día si la apuntas tarde.
+- **Copias de seguridad**: antes de que una actualización toque tus datos y una vez por semana (se guardan
+  las 8 últimas). Para recuperar una: `jobtracker restore-db`.
+- **Exportar a CSV** desde el Kanban (se abre en Excel o Numbers).
+- Mejora: un correo que llega tarde (p. ej. «hemos recibido tu CV») ya no devuelve una candidatura a una
+  columna anterior.
+
 ## 0.6.0
 
 - **Ficha de cada candidatura**: haz clic en una tarjeta del Kanban (o en la tarjeta «Hoy» o en un correo)

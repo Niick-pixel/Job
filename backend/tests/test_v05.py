@@ -156,7 +156,7 @@ def test_digest_main_force_notifies(tmp_path, monkeypatch):
     monkeypatch.setattr(d, "build_digest", lambda db: {"pending": 2, "new_today": 2, "approved_unsent": 0,
                                                        "interviews": [], "stale": []})
     monkeypatch.setattr(d, "init_db", lambda: None)
-    monkeypatch.setattr(d, "load_preferences", lambda db: type("P", (), {"digest_enabled": True, "digest_hour": 9})())
+    monkeypatch.setattr(d, "load_preferences", lambda db: type("P", (), {"digest_enabled": True, "digest_hour": 9, "interview_reminders": False})())
     assert d.main(["--force"]) == 0
     assert sent and "2 candidatura(s) nueva(s)" in sent[0] and (tmp_path / "digest.json").exists()
 
