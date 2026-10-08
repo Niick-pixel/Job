@@ -2,6 +2,22 @@
 
 Las notas de cada versión se muestran dentro de la app al ofrecer la actualización.
 
+## 0.4.0
+
+**Aplicación de escritorio**
+- JobTracker AI se abre en su propia ventana nativa de macOS, ya no en el navegador.
+- Interfaz nueva, minimalista y centrada, con animaciones sutiles (se pueden reducir en Ajustes).
+- 8 temas: Porcelana, Grafito, Océano, Bosque, Atardecer, Lavanda, Medianoche y Arena, más «Automático».
+- Kanban con arrastrar y soltar, CV por arrastre y atajos de teclado (⌘1…⌘6 secciones, ⌘, ajustes).
+
+**Ajustes**
+- Claves API desde la app: Claude, Adzuna y cualquier otra clave personalizada, con botón «Probar»
+  y guía de cómo conseguir cada una. Se guardan en privado y nunca se muestran completas.
+- Elección de modelo de IA y nivel de razonamiento, y conexión con Gmail sin usar la terminal.
+
+**Seguridad**
+- Protección frente a peticiones de otras webs al motor local de la app.
+
 ## 0.3.0
 
 **Agente de búsqueda automática**

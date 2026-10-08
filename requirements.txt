@@ -16,8 +16,8 @@ reportlab>=4.2
 httpx>=0.27
 beautifulsoup4>=4.12
 
-# ── Frontend ──
-streamlit>=1.38
+# ── Ventana nativa (solo macOS: WKWebView vía pyobjc) ──
+pywebview>=6.0; sys_platform == "darwin"
 
 # ── Gmail (opcional: solo si EMAIL_MODE=gmail) ──
 google-api-python-client>=2.140

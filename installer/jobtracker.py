@@ -47,7 +47,6 @@ APP_NAME = "JobTracker AI"
 LABEL_PREFIX = "com.jobtrackerai"
 DEFAULT_MANIFEST_URL = "https://github.com/Niick-pixel/Job/releases/latest/download/manifest.json"
 BACKEND_PORT = 8000
-FRONTEND_PORT = 8501
 CHECK_INTERVAL_SECONDS = 6 * 3600
 AGENT_INTERVAL_SECONDS = 3 * 3600
 KEEP_VERSIONS = 2
@@ -371,7 +370,8 @@ def service_env(paths: Paths) -> dict[str, str]:
 
 
 class Services:
-    NAMES = ("backend", "frontend", "updater", "agent")
+    NAMES = ("backend", "updater", "agent")
+    OBSOLETE = ("frontend",)  # Streamlit (≤ 0.3.0): sustituido por la ventana nativa
     SCHEDULED = ("updater", "agent")  # tareas periódicas, independientes de que la app esté abierta
 
     def __init__(self, paths: Paths, state: dict):
@@ -420,6 +420,9 @@ class Services:
         for name in self.NAMES:
             with open(self.plist_path(name), "wb") as fh:
                 plistlib.dump(self.plist(name), fh)
+        for name in self.OBSOLETE:  # servicios de versiones anteriores
+            self.unload(name)
+            self.plist_path(name).unlink(missing_ok=True)
 
     def is_loaded(self, name: str) -> bool:
         if not IS_MAC:
@@ -435,9 +438,8 @@ class Services:
             self._launchctl("bootout", f"{self.domain}/{self.label(name)}")
 
     def start(self) -> None:
-        for name in ("backend", "frontend"):
-            self.load(name)
-            self._launchctl("kickstart", f"{self.domain}/{self.label(name)}")
+        self.load("backend")
+        self._launchctl("kickstart", f"{self.domain}/{self.label('backend')}")
         self.load_scheduled()
 
     def load_scheduled(self) -> None:
@@ -448,16 +450,14 @@ class Services:
                 self.load(name)
 
     def stop(self) -> None:
-        for name in ("backend", "frontend"):
-            self.unload(name)
+        self.unload("backend")
 
     def running(self) -> bool:
         return http_ok(f"http://127.0.0.1:{BACKEND_PORT}/health")
 
     def restart(self) -> None:
-        for name in ("backend", "frontend"):
-            if self.is_loaded(name):
-                self._launchctl("kickstart", "-k", f"{self.domain}/{self.label(name)}")
+        if self.is_loaded("backend"):
+            self._launchctl("kickstart", "-k", f"{self.domain}/{self.label('backend')}")
 
     def reload_all(self) -> None:
         """Recarga los agentes para que launchd lea plists reescritos."""
@@ -510,7 +510,8 @@ def write_app_bundle(paths: Paths, state: dict, version: str) -> Path:
         "CFBundleShortVersionString": version,
         "CFBundleVersion": version,
         "LSMinimumSystemVersion": "11.0",
-        "LSUIElement": True,
+        "LSUIElement": False,  # app con ventana: icono en el Dock
+        "NSHighResolutionCapable": True,
     }
     icon = CODE_DIR / "installer" / "assets" / "AppIcon.icns"
     if icon.exists():
@@ -723,29 +724,26 @@ def cmd_run(args, paths: Paths) -> None:
     if args.service == "backend":
         os.chdir(code / "backend")
         argv = [py, "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", str(BACKEND_PORT)]
-    elif args.service == "agent":
-        os.chdir(code / "backend")
-        argv = [py, "-m", "app.agent"]
     else:
-        os.chdir(code)
-        argv = [py, "-m", "streamlit", "run", str(code / "frontend" / "streamlit_app.py"),
-                "--server.port", str(FRONTEND_PORT), "--server.address", "127.0.0.1",
-                "--server.headless", "true", "--browser.gatherUsageStats", "false"]
+        os.chdir(code / "backend")
+        argv = [py, "-m", f"app.{args.service}"]  # app.agent | app.desktop
     os.execve(py, argv, env)
 
 
 def cmd_open(_args, paths: Paths) -> None:
+    """Lo ejecuta «JobTracker AI.app»: arranca el motor si hace falta y abre la ventana nativa."""
     state = require_installed(paths)
     services = Services(paths, state)
-    if not http_ok(f"http://127.0.0.1:{FRONTEND_PORT}/_stcore/health"):
+    if not services.running():
         services.start()
-        if not wait_http(f"http://127.0.0.1:{FRONTEND_PORT}/_stcore/health", 90):
+        if not wait_http(f"http://127.0.0.1:{BACKEND_PORT}/health", 90):
             notify(APP_NAME, "No se pudo arrancar. Revisa: jobtracker logs")
-            raise OTAError("La interfaz no arrancó a tiempo")
-    if "ANTHROPIC_API_KEY=sk-" not in paths.env_file.read_text():
-        notify(APP_NAME, "Falta tu clave de Claude: ejecuta «jobtracker config api-key»")
-    if IS_MAC:
-        subprocess.run(["open", f"http://localhost:{FRONTEND_PORT}"])
+            raise OTAError("El motor de la app no arrancó a tiempo")
+    # La ventana sustituye a este proceso (así el Dock la asocia a la app que abriste)
+    log_fd = os.open(paths.logs / "desktop.log", os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
+    os.dup2(log_fd, 1)
+    os.dup2(log_fd, 2)
+    cmd_run(argparse.Namespace(service="desktop"), paths)
 
 
 def cmd_status(_args, paths: Paths) -> None:
@@ -753,9 +751,7 @@ def cmd_status(_args, paths: Paths) -> None:
     services = Services(paths, state)
     print(f"Versión:            {state['current']}  (anterior: {state.get('previous') or '—'})")
     print(f"Instalación:        {paths.home}")
-    print(f"Backend:            {'🟢 activo' if services.running() else '⚪ parado'}")
-    ui = http_ok(f"http://127.0.0.1:{FRONTEND_PORT}/_stcore/health")
-    print(f"Interfaz:           {'🟢 http://localhost:%d' % FRONTEND_PORT if ui else '⚪ parada'}")
+    print(f"Motor:              {'🟢 activo · http://localhost:%d' % BACKEND_PORT if services.running() else '⚪ parado'}")
     print(f"Actualización auto: {'sí' if state.get('auto_update', True) else 'no'}")
     print(f"Última comprobación:{' ' + state['last_check'] if state.get('last_check') else ' nunca'}")
     if state.get("available"):
@@ -847,7 +843,7 @@ def cmd_config(args, paths: Paths) -> None:
 def cmd_uninstall(args, paths: Paths) -> None:
     state = load_state(paths)
     services = Services(paths, state)
-    for name in Services.NAMES:
+    for name in (*Services.NAMES, *Services.OBSOLETE):
         services.unload(name)
         services.plist_path(name).unlink(missing_ok=True)
     shutil.rmtree(apps_dir() / f"{APP_NAME}.app", ignore_errors=True)
@@ -881,7 +877,7 @@ def build_parser() -> argparse.ArgumentParser:
     i.set_defaults(func=cmd_install)
 
     r = sub.add_parser("run", help="(interno) ejecuta un servicio")
-    r.add_argument("service", choices=["backend", "frontend", "agent"])
+    r.add_argument("service", choices=["backend", "agent", "desktop"])
     r.set_defaults(func=cmd_run)
 
     for name, func, help_ in [
@@ -900,7 +896,7 @@ def build_parser() -> argparse.ArgumentParser:
         sub.add_parser(name, help=help_).set_defaults(func=func)
 
     lg = sub.add_parser("logs", help="muestra los logs de un servicio")
-    lg.add_argument("service", nargs="?", default="backend", choices=["backend", "frontend", "updater", "agent"])
+    lg.add_argument("service", nargs="?", default="backend", choices=["backend", "updater", "agent", "desktop"])
     lg.add_argument("-n", "--lines", type=int, default=80)
     lg.set_defaults(func=cmd_logs)
 

@@ -73,5 +73,5 @@ def client(fake_llm, tmp_path, monkeypatch):
 
     app.dependency_overrides[get_session] = _session
     app.dependency_overrides[get_llm] = lambda: fake_llm
-    yield TestClient(app)
+    yield TestClient(app, headers={"X-JobTracker": "1"})
     app.dependency_overrides.clear()

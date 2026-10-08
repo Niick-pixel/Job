@@ -30,7 +30,12 @@ Fuentes ──► duplicados ──► filtros duros ──► criba rápida ─
 - **Barato**: la criba usa Claude Haiku con el perfil en caché; el modelo principal solo trabaja con las finalistas.
 - Nada entra al Kanban ni se envía sin tu aprobación.
 
-![Kanban](docs/kanban.png)
+![Bandeja](docs/bandeja.png)
+
+Es una **aplicación de escritorio para Mac** (ventana nativa, no el navegador) con interfaz minimalista,
+animaciones sutiles y **8 temas** de color, más uno automático que sigue el modo claro/oscuro de macOS:
+
+![Temas](docs/temas.png)
 
 ## Instalar en tu Mac (usuarios)
 
@@ -52,9 +57,21 @@ jobtracker update | rollback      # actualizar ya / volver a la versión anterio
 jobtracker config auto-update off # desactivar actualizaciones automáticas
 jobtracker config start-at-login on
 jobtracker run agent              # ejecuta el agente de búsqueda ahora (en primer plano)
-jobtracker logs backend           # backend | frontend | updater | agent
+jobtracker logs backend           # backend | updater | agent | desktop
 jobtracker uninstall --keep-data
 ```
+
+## Claves API (Ajustes → Claves API)
+
+Se pegan en la propia app; se guardan en `~/Library/Application Support/JobTrackerAI/.env` con permisos
+privados, se aplican al momento y nunca se muestran completas. Cada una tiene un botón «Probar».
+
+| Clave | ¿Necesaria? | Para qué | Cómo conseguirla |
+|---|---|---|---|
+| **Claude** (`ANTHROPIC_API_KEY`) | Sí | Analizar CV y ofertas, puntuar, cartas, correos | [console.anthropic.com](https://console.anthropic.com/settings/keys) → crea cuenta → *Billing* (pago por uso) → *API Keys* → *Create Key* |
+| **Adzuna** (`ADZUNA_APP_ID` + `ADZUNA_APP_KEY`) | No · gratis | Más ofertas (España y 15 países) | [developer.adzuna.com](https://developer.adzuna.com/signup) → regístrate → *Dashboard* → *API Access Details* |
+| **Gmail** (fichero JSON OAuth) | No · gratis | Leer respuestas de empresas y alertas de LinkedIn/InfoJobs | [Google Cloud Console](https://console.cloud.google.com/apis/credentials) → proyecto → activa *Gmail API* → pantalla de consentimiento (Externo, tú como usuario de prueba) → ID de cliente OAuth tipo *Aplicación de escritorio* → descarga el JSON y súbelo en Ajustes → Correo |
+| Cualquier otra | — | Futuras integraciones | Ajustes → *Otras claves* |
 
 ## Actualizaciones OTA
 
@@ -94,7 +111,8 @@ en `installer/pkg/build_pkg.sh`).
 ```bash
 make setup          # instala Python 3.12 (Homebrew), crea .venv e instala dependencias
 # edita .env y pon tu ANTHROPIC_API_KEY
-make dev            # API → http://localhost:8000/docs · UI → http://localhost:8501
+make dev            # interfaz → http://localhost:8000 · API → http://localhost:8000/docs
+make desktop        # (macOS) la misma interfaz en la ventana nativa
 make test           # tests del backend y del instalador (no llaman a la API real)
 make release        # genera dist/ localmente · make pkg (solo macOS)
 ```
@@ -133,7 +151,8 @@ Job/
 │   │       ├── packages.py       # CV en PDF adaptado, respuestas adaptadas, paquete completo
 │   │       └── notify.py         # notificaciones de macOS
 │   └── tests/                    # pytest con un LLM falso
-├── frontend/streamlit_app.py     # UI: Bandeja · Oferta · Kanban · Correos · Agente · Mi CV
+├── frontend/web/                 # interfaz (HTML/CSS/JS sin compilación): 8 temas, vistas en assets/js/views
+│   └── backend/app/desktop.py    #   …y la ventana nativa de macOS que la muestra (pywebview + WKWebView)
 ├── installer/
 │   ├── install.sh                # instalador one-liner (uv + Python propio)
 │   ├── jobtracker.py             # CLI, servicios launchd y motor OTA (solo stdlib)
@@ -184,7 +203,6 @@ Correo ─Claude─► EmailClassification ─► mueve la tarjeta del Kanban + 
 | `DATABASE_URL` | `sqlite:///./data/jobtracker.db` | Cualquier URL SQLAlchemy (Postgres incluido) |
 | `UPLOAD_DIR` | `./data/uploads` | Dónde se guardan los CV originales |
 | `MATCH_LLM_WEIGHT` | `0.7` | Peso del juicio de la IA en el score |
-| `BACKEND_URL` | `http://localhost:8000` | URL de la API para Streamlit |
 | `EMAIL_MODE` | `simulated` | `simulated` o `gmail` |
 | `GMAIL_*` | — | Rutas de credenciales/token y consulta de Gmail |
 | `LLM_FAST_MODEL` | `claude-haiku-5-5` | Modelo de la criba masiva de ofertas |

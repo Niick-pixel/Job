@@ -17,3 +17,48 @@ jobs:
         run: cd backend && python -m pytest -q
       - name: Tests del instalador / OTA
         run: cd installer && python -m pytest -q
+
+  desktop:
+    # Abre la ventana nativa de verdad en macOS y guarda una captura como artefacto
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Comprobar que pywebview y pyobjc están instalados
+        run: python -c "import webview, AppKit, WebKit; print('pywebview', webview.__version__ if hasattr(webview, '__version__') else 'ok')"
+      - name: Arrancar el motor
+        run: |
+          mkdir -p "$RUNNER_TEMP/data"
+          cd backend
+          JOBTRACKER_DATA_DIR="$RUNNER_TEMP/data" nohup python -m uvicorn app.main:app --port 8000 > "$RUNNER_TEMP/backend.log" 2>&1 &
+          curl -fsS --retry 30 --retry-connrefused --retry-delay 1 http://127.0.0.1:8000/health
+      - name: Abrir la ventana nativa y capturarla
+        run: |
+          cd backend
+          JOBTRACKER_DATA_DIR="$RUNNER_TEMP/data" JOBTRACKER_DESKTOP_SMOKE=14 python -m app.desktop > "$RUNNER_TEMP/desktop.log" 2>&1 &
+          PID=$!
+          sleep 9
+          screencapture -x "$RUNNER_TEMP/ventana.png" || echo "::warning::screencapture no disponible en este runner"
+          wait $PID
+          STATUS=$?
+          cat "$RUNNER_TEMP/desktop.log"
+          if grep -q Traceback "$RUNNER_TEMP/desktop.log"; then echo "::error::la ventana lanzó una excepción"; exit 1; fi
+          exit $STATUS
+      - name: Comprobar que la interfaz pidió sus recursos al motor
+        run: |
+          cat "$RUNNER_TEMP/backend.log"
+          grep -q '"GET / HTTP' "$RUNNER_TEMP/backend.log"
+          grep -q '"GET /assets/js/app.js' "$RUNNER_TEMP/backend.log"
+          grep -q '"GET /api/packages' "$RUNNER_TEMP/backend.log"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ventana-macos
+          path: |
+            ${{ runner.temp }}/ventana.png
+            ${{ runner.temp }}/desktop.log
+            ${{ runner.temp }}/backend.log

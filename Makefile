@@ -1,19 +1,19 @@
 VENV ?= .venv
 PY   := $(VENV)/bin/python
 
-.PHONY: setup backend frontend dev test release pkg
+.PHONY: setup backend desktop dev test release pkg
 
 setup:            ## Crea el entorno e instala dependencias (macOS)
 	./scripts/setup_mac.sh
 
-backend:          ## API en http://localhost:8000 (docs en /docs)
+backend:          ## API + interfaz en http://localhost:8000 (docs en /docs)
 	cd backend && ../$(VENV)/bin/uvicorn app.main:app --reload --port 8000
 
-frontend:         ## UI en http://localhost:8501
-	$(VENV)/bin/streamlit run frontend/streamlit_app.py
+desktop:          ## Ventana nativa (macOS; con el backend ya arrancado)
+	cd backend && ../$(PY) -m app.desktop
 
-dev:              ## Backend + frontend a la vez (Ctrl+C para parar ambos)
-	@trap 'kill 0' INT TERM; $(MAKE) backend & $(MAKE) frontend & wait
+dev:              ## Backend con la interfaz en http://localhost:8000 (recarga al guardar)
+	$(MAKE) backend
 
 test:
 	cd backend && ../$(PY) -m pytest -q
