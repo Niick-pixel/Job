@@ -49,6 +49,7 @@ DEFAULT_MANIFEST_URL = "https://github.com/Niick-pixel/Job/releases/latest/downl
 BACKEND_PORT = 8000
 FRONTEND_PORT = 8501
 CHECK_INTERVAL_SECONDS = 6 * 3600
+AGENT_INTERVAL_SECONDS = 3 * 3600
 KEEP_VERSIONS = 2
 IS_MAC = sys.platform == "darwin"
 
@@ -370,7 +371,8 @@ def service_env(paths: Paths) -> dict[str, str]:
 
 
 class Services:
-    NAMES = ("backend", "frontend", "updater")
+    NAMES = ("backend", "frontend", "updater", "agent")
+    SCHEDULED = ("updater", "agent")  # tareas periódicas, independientes de que la app esté abierta
 
     def __init__(self, paths: Paths, state: dict):
         self.paths, self.state = paths, state
@@ -403,6 +405,10 @@ class Services:
         if name == "updater":
             return {**common, "ProgramArguments": [*args, "auto-update"],
                     "StartInterval": CHECK_INTERVAL_SECONDS, "RunAtLoad": True}
+        if name == "agent":
+            # Busca y prepara candidaturas cada 3 h aunque la app esté cerrada
+            return {**common, "ProcessType": "Background", "ProgramArguments": [*args, "run", "agent"],
+                    "StartInterval": AGENT_INTERVAL_SECONDS, "RunAtLoad": False, "LowPriorityIO": True}
         return {**common, "ProgramArguments": [*args, "run", name],
                 "RunAtLoad": bool(self.state.get("start_at_login", False)),
                 "KeepAlive": {"SuccessfulExit": False}, "ThrottleInterval": 5}
@@ -432,7 +438,14 @@ class Services:
         for name in ("backend", "frontend"):
             self.load(name)
             self._launchctl("kickstart", f"{self.domain}/{self.label(name)}")
-        self.load("updater")
+        self.load_scheduled()
+
+    def load_scheduled(self) -> None:
+        """Registra las tareas periódicas que falten. Nunca hace bootout: este código puede
+        estar ejecutándose DENTRO del actualizador, y descargarlo mataría la actualización."""
+        for name in self.SCHEDULED:
+            if self.plist_path(name).exists() or not IS_MAC:
+                self.load(name)
 
     def stop(self) -> None:
         for name in ("backend", "frontend"):
@@ -451,9 +464,9 @@ class Services:
         for name in self.NAMES:
             was = self.is_loaded(name)
             self.unload(name)
-            if was or name == "updater":
+            if was or name in self.SCHEDULED:
                 self.load(name)
-                if name != "updater":
+                if name not in self.SCHEDULED:
                     self._launchctl("kickstart", f"{self.domain}/{self.label(name)}")
 
 
@@ -557,7 +570,9 @@ def refresh_system(paths: Paths, state: dict) -> None:
     version = read_version(CODE_DIR)
     write_app_bundle(paths, state, version)
     write_cli_shim(paths, state)
-    Services(paths, state).write_plists()
+    services = Services(paths, state)
+    services.write_plists()
+    services.load_scheduled()  # p. ej. el agente de búsqueda, nuevo en 0.3.0
 
 
 def apply_release(paths: Paths, state: dict, manifest: dict, tar_path: Path) -> None:
@@ -694,7 +709,7 @@ def cmd_install(args, paths: Paths) -> None:
             save_state(paths, state)
             subprocess.run([args.python, str(paths.ctl), "refresh"], check=True)
             services = Services(paths, state)
-            services.load("updater")
+            services.load_scheduled()
             if not args.no_start:
                 services.start()
     log(f"✅ JobTracker AI {manifest['version']} instalado en {paths.home}")
@@ -708,6 +723,9 @@ def cmd_run(args, paths: Paths) -> None:
     if args.service == "backend":
         os.chdir(code / "backend")
         argv = [py, "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", str(BACKEND_PORT)]
+    elif args.service == "agent":
+        os.chdir(code / "backend")
+        argv = [py, "-m", "app.agent"]
     else:
         os.chdir(code)
         argv = [py, "-m", "streamlit", "run", str(code / "frontend" / "streamlit_app.py"),
@@ -863,7 +881,7 @@ def build_parser() -> argparse.ArgumentParser:
     i.set_defaults(func=cmd_install)
 
     r = sub.add_parser("run", help="(interno) ejecuta un servicio")
-    r.add_argument("service", choices=["backend", "frontend"])
+    r.add_argument("service", choices=["backend", "frontend", "agent"])
     r.set_defaults(func=cmd_run)
 
     for name, func, help_ in [
@@ -882,7 +900,7 @@ def build_parser() -> argparse.ArgumentParser:
         sub.add_parser(name, help=help_).set_defaults(func=func)
 
     lg = sub.add_parser("logs", help="muestra los logs de un servicio")
-    lg.add_argument("service", nargs="?", default="backend", choices=["backend", "frontend", "updater"])
+    lg.add_argument("service", nargs="?", default="backend", choices=["backend", "frontend", "updater", "agent"])
     lg.add_argument("-n", "--lines", type=int, default=80)
     lg.set_defaults(func=cmd_logs)
 

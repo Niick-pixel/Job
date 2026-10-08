@@ -10,6 +10,7 @@ from ..schemas import EmailClassification, EmailIn
 from ..services.email_classifier import CATEGORY_TO_STATUS, classify_email
 from ..services.email_sources import fetch_emails
 from ..services.llm import LLMClient, LLMError, get_llm
+from ..services.sources import is_job_alert
 from .applications import apply_status
 
 router = APIRouter(prefix="/api/emails", tags=["Correos"])
@@ -72,14 +73,16 @@ def classify(email: EmailIn, db: Session = Depends(get_session), llm: LLMClient 
 def sync(db: Session = Depends(get_session), llm: LLMClient = Depends(get_llm)):
     """Lee la bandeja (simulada o Gmail) y procesa los correos nuevos."""
     try:
-        return [process_email(db, llm, e) for e in fetch_emails(get_settings())]
+        # Las alertas de empleo las procesa el agente (son ofertas nuevas, no respuestas)
+        return [process_email(db, llm, e) for e in fetch_emails(get_settings()) if not is_job_alert(e)]
     except LLMError as e:
         raise HTTPException(502, str(e)) from e
 
 
 @router.get("", response_model=list[EmailEvent])
 def list_events(db: Session = Depends(get_session)):
-    return db.exec(select(EmailEvent).order_by(EmailEvent.created_at.desc())).all()
+    return db.exec(select(EmailEvent).where(EmailEvent.category != "alerta_empleo")
+                   .order_by(EmailEvent.created_at.desc())).all()
 
 
 @router.get("/alerts", response_model=list[EmailEvent])

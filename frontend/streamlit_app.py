@@ -72,7 +72,80 @@ with st.sidebar:
             if call("POST", "/api/system/update") is not None:
                 st.info("Actualizando… la app se reiniciará sola en ~1 minuto. Recarga la página después.")
 
-tab_cv, tab_job, tab_board, tab_mail = st.tabs(["📄 Mi CV", "🔍 Analizar oferta", "📋 Kanban", "📬 Correos"])
+pending = call("GET", "/api/packages") or []
+tab_inbox, tab_job, tab_board, tab_mail, tab_agent, tab_cv = st.tabs([
+    f"📥 Bandeja ({len(pending)})", "🔍 Analizar oferta", "📋 Kanban", "📬 Correos", "🤖 Agente", "📄 Mi CV"])
+
+# ── Bandeja de aprobación ───────────────────────────────────────
+with tab_inbox:
+    if not pending:
+        st.info("No hay candidaturas pendientes. El agente las prepara solo; también puedes pulsar "
+                "«Buscar ahora» en la pestaña 🤖 Agente o «Preparar candidatura» en 🔍 Analizar oferta.")
+    for pkg in pending:
+        job, match = pkg["job"], pkg["match"] or {}
+        urg = job.get("urgency") or {}
+        with st.container(border=True):
+            h1, h2 = st.columns([4, 1])
+            h1.markdown(f"### {job['title']}\n**{job['company'] or '¿?'}** · {job['location'] or ''} · _{job['source']}_")
+            if match:
+                h2.metric("Encaje", f"{match['score']:.0f}%")
+            st.caption(f"{URGENCY_ICON.get(urg.get('level'), '⚪')} {urg.get('message', '')}")
+            if match.get("summary"):
+                st.write(match["summary"])
+            c1, c2 = st.columns(2)
+            if match.get("strengths"):
+                c1.markdown("**✅ Puntos fuertes**\n" + "\n".join(f"- {x}" for x in match["strengths"][:4]))
+            if match.get("gaps"):
+                c2.markdown("**⚠️ Brechas**\n" + "\n".join(f"- {x}" for x in match["gaps"][:4]))
+
+            st.markdown(f"**Titular adaptado:** {pkg['headline']}")
+            with st.expander(f"✍️ Viñetas mejoradas ({len(pkg['bullets'])})"):
+                for b in pkg["bullets"]:
+                    st.markdown(f"~~{b['original']}~~\n\n➡️ **{b['improved']}**")
+            letter = st.text_area("Carta de presentación", pkg["cover_letter"], height=220, key=f"letter_{pkg['id']}")
+            answered = [a for a in pkg["answers"] if a.get("answer")]
+            if answered:
+                with st.expander(f"💬 Respuestas adaptadas ({len(answered)})"):
+                    for a in answered:
+                        st.markdown(f"**{a['question']}**\n\n{a['answer']}")
+            if pkg["pending_answers"]:
+                st.caption("Sin respuesta base (complétalas en 📄 Mi CV): " + "; ".join(pkg["pending_answers"][:5]))
+            if pkg["honesty_warnings"]:
+                st.warning("No añadido por falta de evidencia en tu CV: " + ", ".join(pkg["honesty_warnings"]))
+
+            pdf = api.get(f"/api/packages/{pkg['id']}/cv.pdf")
+            a1, a2, a3, a4 = st.columns(4)
+            if pdf.status_code == 200:
+                a1.download_button("📄 CV adaptado (PDF)", pdf.content, file_name=f"CV_{job['company'] or 'oferta'}.pdf",
+                                   mime="application/pdf", key=f"pdf_{pkg['id']}")
+            if job.get("apply_url"):
+                a2.link_button("🔗 Abrir oferta", job["apply_url"])
+            if a3.button("✅ Aprobar", key=f"ok_{pkg['id']}", type="primary"):
+                call("POST", f"/api/packages/{pkg['id']}/decision", json={"decision": "aprobada", "cover_letter": letter})
+                st.rerun()
+            if a4.button("📤 Ya la envié", key=f"sent_{pkg['id']}"):
+                call("POST", f"/api/packages/{pkg['id']}/decision", json={"decision": "enviada", "cover_letter": letter})
+                st.rerun()
+            r1, r2 = st.columns([3, 1])
+            reason = r1.text_input("Motivo si la descartas (el agente aprende de esto)", key=f"why_{pkg['id']}",
+                                   placeholder="p. ej. no quiero consultoras, sueldo bajo, demasiado junior…")
+            if r2.button("🗑️ Descartar", key=f"no_{pkg['id']}"):
+                call("POST", f"/api/packages/{pkg['id']}/decision", json={"decision": "descartada", "reason": reason or None})
+                st.rerun()
+
+    approved = call("GET", "/api/packages", params={"status": "aprobada"}) or []
+    if approved:
+        st.divider()
+        st.subheader(f"✅ Aprobadas, pendientes de enviar ({len(approved)})")
+        for pkg in approved:
+            j = pkg["job"]
+            c1, c2, c3 = st.columns([4, 1, 1])
+            c1.markdown(f"**{j['title']}** — {j['company'] or ''}")
+            if j.get("apply_url"):
+                c2.link_button("🔗 Aplicar", j["apply_url"])
+            if c3.button("📤 Enviada", key=f"sent2_{pkg['id']}"):
+                call("POST", f"/api/packages/{pkg['id']}/decision", json={"decision": "enviada"})
+                st.rerun()
 
 # ── CV ──────────────────────────────────────────────────────────
 with tab_cv:
@@ -99,6 +172,20 @@ with tab_cv:
                 st.markdown(f"**{e['role']}** — {e['company']} ({e.get('start') or '?'} – {e.get('end') or '?'})")
                 for h in e.get("highlights", []):
                     st.markdown(f"- {h}")
+
+    st.divider()
+    st.subheader("💬 Banco de respuestas")
+    st.caption("Respóndelas una vez: la IA las adapta a cada oferta, pero nunca inventa las que dejes vacías.")
+    answers = call("GET", "/api/answers") or []
+    with st.form("answers"):
+        edited = {a["key"]: st.text_area(a["question"], a["answer"], key=f"ans_{a['key']}", height=80)
+                  for a in answers}
+        if st.form_submit_button("Guardar respuestas", type="primary"):
+            for a in answers:
+                if edited[a["key"]] != a["answer"]:
+                    call("PUT", "/api/answers", json={"key": a["key"], "question": a["question"],
+                                                       "answer": edited[a["key"]]})
+            st.success("Guardadas")
 
 # ── Oferta + matching + optimización ────────────────────────────
 with tab_job:
@@ -132,7 +219,11 @@ with tab_job:
         if not cv_id:
             st.info("Sube un CV para calcular la compatibilidad.")
         else:
-            b1, b2 = st.columns(2)
+            b1, b2, b3 = st.columns(3)
+            if b3.button("📦 Preparar candidatura"):
+                with st.spinner("Generando CV en PDF, carta y respuestas…"):
+                    if call("POST", f"/api/jobs/{job['id']}/prepare", params={"cv_id": cv_id}):
+                        st.success("Lista en 📥 Bandeja")
             if b1.button("🎯 Calcular compatibilidad"):
                 with st.spinner("Comparando CV y oferta…"):
                     st.session_state[f"match_{job['id']}"] = call(
@@ -211,3 +302,91 @@ with tab_mail:
             st.write(ev["analysis"].get("summary", ""))
             if ev["analysis"].get("action_required"):
                 st.info(ev["analysis"]["action_required"])
+
+# ── Agente ──────────────────────────────────────────────────────
+
+
+def _list(text: str) -> list[str]:
+    return [x.strip() for x in text.replace("\n", ",").split(",") if x.strip()]
+
+
+with tab_agent:
+    runs = call("GET", "/api/agent/runs", params={"limit": 5}) or []
+    c1, c2 = st.columns([1, 3])
+    if c1.button("🔎 Buscar ahora", type="primary"):
+        if call("POST", "/api/agent/run") is not None:
+            st.info("Buscando… tarda unos minutos. Las candidaturas aparecerán en 📥 Bandeja.")
+    if runs:
+        last = runs[0]
+        icon = {"ok": "✅", "error": "❌", "running": "⏳"}.get(last["status"], "•")
+        s_ = last["stats"] or {}
+        c2.markdown(f"{icon} Última ejecución ({last['trigger']}) {last['started_at'][:16].replace('T', ' ')}: "
+                    f"**{s_.get('descubiertas', 0)}** descubiertas · {s_.get('duplicadas', 0)} duplicadas · "
+                    f"{s_.get('filtradas', 0)} filtradas · {s_.get('criba_baja', 0)} descartadas por IA · "
+                    f"**{s_.get('preparadas', 0)}** preparadas")
+        if last.get("error"):
+            c2.error(last["error"])
+        with st.expander("Detalle por fuente"):
+            st.json(s_.get("fuentes", {}))
+
+    prefs = call("GET", "/api/agent/preferences") or {}
+    src = prefs.get("sources", {})
+    with st.form("prefs"):
+        st.subheader("🎯 Qué buscas")
+        enabled = st.toggle("Agente activado (se ejecuta solo cada 3 h en la app instalada)", prefs.get("enabled", True))
+        f1, f2 = st.columns(2)
+        titles = f1.text_area("Puestos objetivo (separados por comas; vacío = todos)", ", ".join(prefs.get("target_titles", [])))
+        exclude = f2.text_area("Excluir si contiene", ", ".join(prefs.get("exclude_keywords", [])),
+                               placeholder="consultora, guardias, prácticas…")
+        locations = f1.text_input("Ubicaciones aceptadas", ", ".join(prefs.get("locations", [])), placeholder="Madrid, España")
+        blacklist = f2.text_input("Empresas a evitar", ", ".join(prefs.get("blacklist_companies", [])))
+        g1, g2, g3, g4 = st.columns(4)
+        remote_ok = g1.checkbox("Acepto remoto", prefs.get("remote_ok", True))
+        remote_only = g2.checkbox("Solo remoto", prefs.get("remote_only", False))
+        min_salary = g3.number_input("Salario mínimo anual", min_value=0, value=prefs.get("min_salary") or 0, step=1000)
+        max_age = g4.number_input("Antigüedad máx. (días)", min_value=1, value=prefs.get("max_age_days", 30))
+        k1, k2, k3 = st.columns(3)
+        triage_t = k1.slider("Umbral de criba rápida", 0, 100, prefs.get("triage_threshold", 65))
+        prepare_t = k2.slider("Umbral para preparar candidatura", 0, 100, prefs.get("prepare_threshold", 75))
+        top_n = k3.number_input("Análisis completos por ejecución", 1, 50, prefs.get("deep_match_top_n", 10))
+
+        st.subheader("📡 Fuentes")
+        st.caption("Greenhouse/Lever/Ashby: el identificador está en la URL de la página de empleo de la empresa, "
+                   "p. ej. boards.greenhouse.io/**acme**, jobs.lever.co/**acme**, jobs.ashbyhq.com/**acme**.")
+        s1, s2, s3 = st.columns(3)
+        gh = s1.text_area("Greenhouse", ", ".join(src.get("greenhouse", [])))
+        lv = s2.text_area("Lever", ", ".join(src.get("lever", [])))
+        ab = s3.text_area("Ashby", ", ".join(src.get("ashby", [])))
+        t1, t2, t3 = st.columns(3)
+        remotive = t1.text_input("Búsquedas en Remotive (remoto)", ", ".join(src.get("remotive_queries", [])))
+        adzuna = t2.text_input("Búsquedas en Adzuna (requiere API key)", ", ".join(src.get("adzuna_queries", [])))
+        country = t3.text_input("País Adzuna", src.get("adzuna_country", "es"))
+        alerts = st.checkbox("Leer alertas de empleo de mi correo (LinkedIn, InfoJobs, Indeed…)", src.get("email_alerts", True))
+
+        if st.form_submit_button("Guardar", type="primary"):
+            body = {
+                **prefs, "enabled": enabled, "target_titles": _list(titles), "exclude_keywords": _list(exclude),
+                "locations": _list(locations), "blacklist_companies": _list(blacklist), "remote_ok": remote_ok,
+                "remote_only": remote_only, "min_salary": int(min_salary) or None, "max_age_days": int(max_age),
+                "triage_threshold": triage_t, "prepare_threshold": prepare_t, "deep_match_top_n": int(top_n),
+                "sources": {**src, "greenhouse": _list(gh), "lever": _list(lv), "ashby": _list(ab),
+                            "remotive_queries": _list(remotive), "adzuna_queries": _list(adzuna),
+                            "adzuna_country": country.strip() or "es", "email_alerts": alerts},
+            }
+            if call("PUT", "/api/agent/preferences", json=body):
+                st.success("Preferencias guardadas")
+
+    st.subheader("🧭 Embudo de ofertas descubiertas")
+    labels = {"": "Todas", "candidata": "Candidatas", "en_bandeja": "En bandeja", "criba_baja": "Descartadas por IA",
+              "filtrada": "Filtradas", "aprobada": "Aprobadas", "descartada": "Descartadas por ti"}
+    status = st.selectbox("Estado", list(labels), format_func=labels.get)
+    found = call("GET", "/api/agent/jobs", params={"status": status} if status else None) or []
+    if found:
+        st.dataframe(
+            [{"Puesto": j["title"], "Empresa": j["company"], "Ubicación": j["location"], "Fuente": j["source"],
+              "Estado": j["status"], "Score": j["score"], "Motivo": j["reason"], "Enlace": j["url"]} for j in found],
+            column_config={"Enlace": st.column_config.LinkColumn("Enlace", display_text="abrir")},
+            hide_index=True,
+        )
+    else:
+        st.caption("Todavía no hay ofertas descubiertas.")

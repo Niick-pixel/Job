@@ -5,6 +5,29 @@ analiza tu CV, calcula la compatibilidad con cada oferta, te dice si aún estás
 tiempo de aplicar, reescribe tus viñetas para el ATS, redacta cartas de presentación
 y clasifica los correos de las empresas en un tablero Kanban.
 
+Desde la 0.3.0 incluye un **agente que busca ofertas solo** y te deja las mejores
+candidaturas preparadas (CV en PDF adaptado, carta y respuestas) en una **Bandeja** para
+que solo tengas que aprobarlas.
+
+## El agente de búsqueda
+
+```
+Fuentes ──► duplicados ──► filtros duros ──► criba rápida ──► análisis completo ──► candidatura ──► 📥 Bandeja
+(ATS,        (gratis)       (gratis: puesto,   (Claude Haiku,    (Claude Opus, solo   (PDF, carta,      (tú apruebas,
+ portales,                   ubicación,         por lotes, CV     las N mejores por    respuestas)        envías o descartas
+ alertas)                    salario…)          en caché)         encaje + urgencia)                      con motivo)
+```
+
+- **Cuándo**: cada 3 h en segundo plano (LaunchAgent), aunque la app esté cerrada, o con «🔎 Buscar ahora».
+- **Fuentes**: Greenhouse, Lever y Ashby (APIs públicas por empresa), Remotive, Adzuna (API key gratuita)
+  y tus **alertas de empleo por correo** (LinkedIn, InfoJobs, Indeed…). LinkedIn no se rasca ni se automatiza:
+  su acuerdo de usuario lo prohíbe; leer las alertas que ya recibes es la vía segura.
+- **Aprende**: los motivos con los que descartas candidaturas se tienen en cuenta en las siguientes cribas.
+- **Honesto**: el CV adaptado solo reordena y reformula lo que ya está en tu CV; las preguntas de filtro
+  sin respuesta base quedan pendientes en vez de inventarse.
+- **Barato**: la criba usa Claude Haiku con el perfil en caché; el modelo principal solo trabaja con las finalistas.
+- Nada entra al Kanban ni se envía sin tu aprobación.
+
 ![Kanban](docs/kanban.png)
 
 ## Instalar en tu Mac (usuarios)
@@ -26,7 +49,8 @@ jobtracker config api-key         # guarda tu ANTHROPIC_API_KEY (permisos 600)
 jobtracker update | rollback      # actualizar ya / volver a la versión anterior
 jobtracker config auto-update off # desactivar actualizaciones automáticas
 jobtracker config start-at-login on
-jobtracker logs backend           # backend | frontend | updater
+jobtracker run agent              # ejecuta el agente de búsqueda ahora (en primer plano)
+jobtracker logs backend           # backend | frontend | updater | agent
 jobtracker uninstall --keep-data
 ```
 
@@ -84,11 +108,15 @@ Job/
 │   │   ├── database.py           # SQLModel engine (SQLite por defecto, Postgres vía DATABASE_URL)
 │   │   ├── models.py             # Tablas: CVProfile, Job, MatchResult, Application, EmailEvent
 │   │   ├── schemas.py            # Esquemas de salida estructurada de la IA + contratos API
+│   │   ├── agent.py              # `python -m app.agent` (lo lanza launchd cada 3 h)
 │   │   ├── routers/
 │   │   │   ├── cv.py             # POST /api/cv (subida y análisis)
 │   │   │   ├── jobs.py           # ofertas, /match, /optimize
 │   │   │   ├── applications.py   # Kanban (board, mover tarjetas)
-│   │   │   └── emails.py         # clasificar / sincronizar bandeja / alertas de entrevista
+│   │   │   ├── emails.py         # clasificar / sincronizar bandeja / alertas de entrevista
+│   │   │   ├── agent.py          # preferencias, «buscar ahora», historial y embudo
+│   │   │   ├── packages.py       # Bandeja de aprobación, PDF, banco de respuestas
+│   │   │   └── system.py         # versión y actualización OTA
 │   │   └── services/
 │   │       ├── llm.py            # Único punto de contacto con Claude (salidas tipadas)
 │   │       ├── cv_parser.py      # pdfplumber + perfilado con IA
@@ -97,9 +125,13 @@ Job/
 │   │       ├── urgency.py        # filtro de urgencia (reglas deterministas)
 │   │       ├── optimizer.py      # viñetas ATS + carta de presentación
 │   │       ├── email_classifier.py
-│   │       └── email_sources.py  # bandeja simulada (JSON) o Gmail (OAuth, solo lectura)
+│   │       ├── email_sources.py  # bandeja simulada (JSON) o Gmail (OAuth, solo lectura)
+│   │       ├── sources.py        # Greenhouse, Lever, Ashby, Remotive, Adzuna, alertas por correo
+│   │       ├── agent.py          # embudo: duplicados → filtros → criba → análisis → candidatura
+│   │       ├── packages.py       # CV en PDF adaptado, respuestas adaptadas, paquete completo
+│   │       └── notify.py         # notificaciones de macOS
 │   └── tests/                    # pytest con un LLM falso
-├── frontend/streamlit_app.py     # UI: CV · Oferta · Kanban · Correos
+├── frontend/streamlit_app.py     # UI: Bandeja · Oferta · Kanban · Correos · Agente · Mi CV
 ├── installer/
 │   ├── install.sh                # instalador one-liner (uv + Python propio)
 │   ├── jobtracker.py             # CLI, servicios launchd y motor OTA (solo stdlib)
@@ -153,6 +185,8 @@ Correo ─Claude─► EmailClassification ─► mueve la tarjeta del Kanban + 
 | `BACKEND_URL` | `http://localhost:8000` | URL de la API para Streamlit |
 | `EMAIL_MODE` | `simulated` | `simulated` o `gmail` |
 | `GMAIL_*` | — | Rutas de credenciales/token y consulta de Gmail |
+| `LLM_FAST_MODEL` | `claude-haiku-5-5` | Modelo de la criba masiva de ofertas |
+| `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` | — | Credenciales gratuitas de developer.adzuna.com (opcional) |
 
 ## API principal
 
@@ -166,11 +200,18 @@ Correo ─Claude─► EmailClassification ─► mueve la tarjeta del Kanban + 
 | PATCH | `/api/applications/{id}` | Mover tarjeta / notas / fecha de entrevista |
 | POST | `/api/emails/classify` · `/api/emails/sync` | Clasificar un correo / sincronizar bandeja |
 | GET | `/api/emails/alerts` | Invitaciones a entrevista detectadas |
+| GET/PUT | `/api/agent/preferences` | Preferencias de búsqueda y fuentes |
+| POST | `/api/agent/run` | Ejecuta el agente ahora (en segundo plano) |
+| GET | `/api/agent/runs` · `/api/agent/jobs` | Historial de ejecuciones · embudo de ofertas con motivos |
+| GET | `/api/packages` | Bandeja: candidaturas preparadas, ordenadas por encaje y urgencia |
+| POST | `/api/jobs/{id}/prepare?cv_id=` | Prepara a mano una candidatura |
+| POST | `/api/packages/{id}/decision` | `aprobada` · `enviada` · `descartada` (+ motivo) |
+| GET | `/api/packages/{id}/cv.pdf` | CV adaptado en PDF |
+| GET/PUT | `/api/answers` | Banco de respuestas a preguntas de filtro |
 
 ## Próximos pasos sugeridos
 
-1. Crear eventos de calendario (Google Calendar / `.ics` para Calendar.app) al detectar entrevistas.
-2. Notificaciones nativas de macOS (`osascript` / `pync`) y sincronización periódica de Gmail.
-3. Exportar el CV optimizado a PDF/DOCX.
-4. Migraciones con Alembic al pasar a PostgreSQL.
-5. Frontend Next.js con Kanban drag-and-drop cuando la lógica esté estable.
+1. **Fase 3**: agente que rellena formularios de Greenhouse/Lever/Ashby (Playwright) con captura antes de enviar.
+2. **Fase 4**: seguimientos automáticos (borradores en Gmail), eventos de calendario y dossier de entrevista.
+3. Panel de embudo: tasa de respuesta por fuente y por versión de CV.
+4. Migraciones con Alembic si se pasa a PostgreSQL.

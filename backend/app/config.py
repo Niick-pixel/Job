@@ -21,9 +21,16 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = None
     llm_model: str = "claude-opus-5-5"
     llm_effort: str = "medium"
+    # Modelo rápido y barato para la criba masiva de ofertas
+    llm_fast_model: str = "claude-haiku-5-5"
+
+    # Fuentes de ofertas con credenciales (opcionales)
+    adzuna_app_id: str | None = None
+    adzuna_app_key: str | None = None
 
     database_url: str = f"sqlite:///{DATA_DIR / 'jobtracker.db'}"
     upload_dir: Path = DATA_DIR / "uploads"
+    generated_dir: Path = DATA_DIR / "generated"
     match_llm_weight: float = 0.7
 
     email_mode: str = "simulated"  # simulated | gmail

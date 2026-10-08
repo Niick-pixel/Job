@@ -17,8 +17,15 @@ class LLMError(RuntimeError):
     pass
 
 
+# Modelos con fallback del lado del servidor (Claude Haiku 5.5 no lo tiene)
+_FALLBACK_MODELS = {"claude-opus-5-5", "claude-opus-5", "claude-fable-5-1"}
+
+
 class LLMClient(Protocol):
-    def structured(self, *, system: str, prompt: str, schema: type[T], max_tokens: int = 16000) -> T: ...
+    def structured(
+        self, *, system: str, prompt: str, schema: type[T], max_tokens: int = 16000,
+        model: str | None = None, effort: str | None = None, cache_system: bool = False,
+    ) -> T: ...
 
 
 class AnthropicLLM:
@@ -29,19 +36,31 @@ class AnthropicLLM:
         self.model = model or settings.llm_model
         self.effort = effort or settings.llm_effort
 
-    def structured(self, *, system: str, prompt: str, schema: type[T], max_tokens: int = 16000) -> T:
+    def structured(
+        self, *, system: str, prompt: str, schema: type[T], max_tokens: int = 16000,
+        model: str | None = None, effort: str | None = None, cache_system: bool = False,
+    ) -> T:
+        """`model`/`effort` permiten usar un modelo rápido (criba) sin cambiar el principal.
+        `cache_system` cachea el prompt de sistema: útil cuando se repite en muchas llamadas
+        (p. ej. el perfil del CV al puntuar cientos de ofertas)."""
+        model = model or self.model
+        extra: dict = {}
+        if model in _FALLBACK_MODELS:
+            # Si un clasificador de seguridad rechaza la petición, la API la
+            # reintenta automáticamente en el modelo de respaldo recomendado.
+            extra = {"betas": ["server-side-fallback-2026-07-01"], "fallbacks": "default"}
+        system_param = (
+            [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}] if cache_system else system
+        )
         try:
             response = self._client.beta.messages.parse(
-                model=self.model,
+                model=model,
                 max_tokens=max_tokens,
-                system=system,
+                system=system_param,
                 messages=[{"role": "user", "content": prompt}],
                 output_format=schema,
-                output_config={"effort": self.effort},
-                # Si un clasificador de seguridad rechaza la petición, la API la
-                # reintenta automáticamente en el modelo de respaldo recomendado.
-                betas=["server-side-fallback-2026-07-01"],
-                fallbacks="default",
+                output_config={"effort": effort or self.effort},
+                **extra,
             )
         except anthropic.AuthenticationError as e:
             raise LLMError("ANTHROPIC_API_KEY inválida o ausente") from e

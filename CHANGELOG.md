@@ -2,11 +2,24 @@
 
 Las notas de cada versión se muestran dentro de la app al ofrecer la actualización.
 
-## 0.2.1
+## 0.3.0
 
+**Agente de búsqueda automática**
+- Busca ofertas solo cada 3 h (aunque la app esté cerrada) en Greenhouse, Lever, Ashby, Remotive,
+  Adzuna y en tus alertas de empleo por correo (LinkedIn, InfoJobs, Indeed…).
+- Elimina duplicados entre portales y aplica tus filtros (puestos, ubicación, remoto, salario,
+  antigüedad, empresas a evitar) antes de gastar en IA.
+- Criba rápida y barata con Claude Haiku y análisis completo solo de las mejores.
+- Aprende de los motivos con los que descartas ofertas.
+
+**Candidaturas listas para enviar**
+- 📥 Bandeja: revisa y aprueba en segundos cada candidatura preparada.
+- CV en PDF adaptado a cada oferta (sin inventar nada) y carta de presentación editable.
+- Banco de respuestas para preguntas de filtro: las respondes una vez y se adaptan a cada oferta.
+
+**Seguridad**
 - Las actualizaciones OTA pasan a estar firmadas con Ed25519: a partir de esta versión la app
   rechaza cualquier actualización que no lleve una firma válida de JobTracker AI.
-- Publicación de versiones desde la pestaña Actions de GitHub.
 
 ## 0.2.0
 

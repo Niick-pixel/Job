@@ -44,10 +44,14 @@ class FakeLLM:
 
     def __init__(self):
         self.calls = []
+        self.kwargs = []
+        self.responses = dict(self.responses)
 
-    def structured(self, *, system, prompt, schema, max_tokens=16000):
+    def structured(self, *, system, prompt, schema, max_tokens=16000, **kwargs):
         self.calls.append(schema)
-        return self.responses[schema]
+        self.kwargs.append(kwargs)
+        handler = self.responses[schema]
+        return handler(system=system, prompt=prompt) if callable(handler) else handler
 
 
 @pytest.fixture

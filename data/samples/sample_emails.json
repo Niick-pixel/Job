@@ -19,5 +19,12 @@
     "subject": "We received your application",
     "body": "Hi! Thanks for applying to the Python Engineer role at Fintechly. Our team will review your application and get back to you within 2 weeks.",
     "received_at": "2026-10-04T11:00:00Z"
+  },
+  {
+    "message_id": "sim-004",
+    "sender": "jobalerts-noreply@linkedin.com",
+    "subject": "Nuevas ofertas: Backend Developer en Madrid",
+    "body": "Tu alerta de empleo: Backend Developer · Madrid\n\nPython Backend Engineer\nFintechly · Madrid (híbrido)\nhttps://www.linkedin.com/jobs/view/4000000001\n\nSenior Django Developer\nShopNova · Remoto (España)\nhttps://www.linkedin.com/jobs/view/4000000002\n\nData Platform Engineer\nOrbit Logistics · Barcelona\nhttps://www.linkedin.com/jobs/view/4000000003",
+    "received_at": "2026-10-07T07:30:00Z"
   }
 ]

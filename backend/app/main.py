@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import VERSION
 from .database import init_db
-from .routers import applications, cv, emails, jobs, system
+from .routers import agent, applications, cv, emails, jobs, packages, system
 
 
 @asynccontextmanager
@@ -26,7 +26,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-for r in (cv.router, jobs.router, applications.router, emails.router, system.router):
+for r in (cv.router, jobs.router, applications.router, emails.router, system.router, agent.router, packages.router):
     app.include_router(r)
 
 

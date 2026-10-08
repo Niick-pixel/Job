@@ -20,6 +20,10 @@ class Experience(BaseModel):
 
 class CVExtraction(BaseModel):
     full_name: str | None
+    email: str | None = None
+    phone: str | None = None
+    location: str | None = Field(None, description="Ciudad/país de residencia")
+    links: list[str] = Field(default_factory=list, description="LinkedIn, GitHub, portfolio…")
     headline: str | None = Field(None, description="Titular profesional en una línea")
     years_experience: float | None = Field(None, description="Años totales de experiencia profesional")
     seniority: Literal["junior", "mid", "senior", "lead", "unknown"]
@@ -149,3 +153,80 @@ class EmailIn(BaseModel):
     subject: str
     body: str
     received_at: datetime | None = None
+
+
+# ── Agente de búsqueda (Fase 1) ────────────────────────────────
+
+
+class SourcesConfig(BaseModel):
+    greenhouse: list[str] = Field(default_factory=list, description="board tokens: boards.greenhouse.io/<token>")
+    lever: list[str] = Field(default_factory=list, description="empresas: jobs.lever.co/<empresa>")
+    ashby: list[str] = Field(default_factory=list, description="organizaciones: jobs.ashbyhq.com/<org>")
+    remotive_queries: list[str] = Field(default_factory=list, description="búsquedas en Remotive (remoto)")
+    adzuna_queries: list[str] = Field(default_factory=list, description="búsquedas en Adzuna (requiere API key)")
+    adzuna_country: str = "es"
+    email_alerts: bool = True
+
+
+class SearchPreferences(BaseModel):
+    enabled: bool = True
+    target_titles: list[str] = Field(default_factory=list, description="El título debe contener alguno (vacío = todos)")
+    exclude_keywords: list[str] = Field(default_factory=list, description="Descarta si el título/texto contiene alguno")
+    locations: list[str] = Field(default_factory=list, description="Ciudades/países aceptados (vacío = todos)")
+    remote_ok: bool = True
+    remote_only: bool = False
+    min_salary: int | None = Field(None, description="Salario anual mínimo; solo filtra si la oferta lo indica")
+    blacklist_companies: list[str] = Field(default_factory=list)
+    max_age_days: int = 30
+    triage_threshold: int = 65
+    deep_match_top_n: int = 10
+    prepare_threshold: int = 75
+    max_triage_per_run: int = 150
+    sources: SourcesConfig = Field(default_factory=SourcesConfig)
+
+
+class TriageItem(BaseModel):
+    ref: int = Field(description="Número de la oferta en la lista recibida")
+    score: int = Field(description="Encaje 0-100")
+    reason: str = Field(description="Una frase: por qué encaja o no")
+
+
+class TriageBatch(BaseModel):
+    items: list[TriageItem]
+
+
+class AlertJob(BaseModel):
+    title: str
+    company: str | None
+    location: str | None
+    url: str | None
+    snippet: str | None = Field(None, description="Texto de la oferta que aparezca en el correo")
+
+
+class AlertExtraction(BaseModel):
+    jobs: list[AlertJob]
+
+
+# ── Candidaturas preparadas (Fase 2) ───────────────────────────
+
+
+class TailoredAnswer(BaseModel):
+    key: str
+    question: str
+    answer: str = Field(description="Respuesta adaptada a la oferta, basada SOLO en la respuesta base del usuario")
+
+
+class TailoredAnswers(BaseModel):
+    answers: list[TailoredAnswer]
+
+
+class PackageDecision(BaseModel):
+    decision: Literal["aprobada", "descartada", "enviada"]
+    reason: str | None = None
+    cover_letter: str | None = None
+
+
+class AnswerIn(BaseModel):
+    key: str
+    question: str
+    answer: str = ""

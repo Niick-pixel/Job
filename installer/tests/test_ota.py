@@ -88,6 +88,16 @@ def test_safe_extract_rejects_symlinks(tmp_path):
         jt.safe_extract(bad, tmp_path / "out")
 
 
+def test_launchd_plists():
+    paths = jt.Paths(Path("/Users/x/Library/Application Support/JobTrackerAI"))
+    services = jt.Services(paths, {"python": "/py"})
+    agent = services.plist("agent")
+    assert agent["ProgramArguments"][-2:] == ["run", "agent"]
+    assert agent["StartInterval"] == 3 * 3600 and agent["RunAtLoad"] is False and "KeepAlive" not in agent
+    assert services.plist("updater")["RunAtLoad"] is True
+    assert set(jt.Services.SCHEDULED) == {"updater", "agent"}
+
+
 # ── Extremo a extremo ──────────────────────────────────────────
 
 

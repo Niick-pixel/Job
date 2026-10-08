@@ -3,7 +3,7 @@ from sqlmodel import Session, select
 
 from ..config import get_settings
 from ..database import get_session
-from ..models import Application, CVProfile, Job, MatchResult
+from ..models import Application, CVProfile, Job, MatchResult, PipelineStatus
 from ..schemas import CVExtraction, JobCreate, JobExtraction, JobRead, MatchRead, OptimizationResult
 from ..services.job_ingest import JobFetchError, analyze_job, fetch_job_text
 from ..services.llm import LLMClient, LLMError, get_llm
@@ -64,9 +64,14 @@ def create_job(payload: JobCreate, db: Session = Depends(get_session), llm: LLMC
     return _job_read(job)
 
 
+HIDDEN = (PipelineStatus.FILTERED.value, PipelineStatus.LOW_SCORE.value, PipelineStatus.DISCARDED.value)
+
+
 @router.get("", response_model=list[JobRead])
 def list_jobs(db: Session = Depends(get_session)):
-    return [_job_read(j) for j in db.exec(select(Job).order_by(Job.created_at.desc())).all()]
+    """Ofertas útiles: las tuyas y las del agente que siguen vivas (las descartadas, en /api/agent/jobs)."""
+    q = select(Job).where(Job.pipeline_status.not_in(HIDDEN)).order_by(Job.created_at.desc())
+    return [_job_read(j) for j in db.exec(q).all()]
 
 
 @router.get("/{job_id}", response_model=JobRead)
