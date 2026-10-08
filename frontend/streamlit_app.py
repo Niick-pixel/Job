@@ -331,6 +331,13 @@ with tab_agent:
 
     prefs = call("GET", "/api/agent/preferences") or {}
     src = prefs.get("sources", {})
+    a1, a2 = st.columns([1, 3])
+    if a1.button("✨ Rellenar desde mi CV"):
+        with st.spinner("Deduciendo ubicación y búsquedas de tu CV…"):
+            if call("POST", "/api/agent/preferences/auto"):
+                st.rerun()
+    a2.caption("La primera vez el agente se configura solo a partir de tu CV. Ajusta lo que quieras; "
+               "para vigilar empresas concretas añade su identificador de Greenhouse, Lever o Ashby.")
     with st.form("prefs"):
         st.subheader("🎯 Qué buscas")
         enabled = st.toggle("Agente activado (se ejecuta solo cada 3 h en la app instalada)", prefs.get("enabled", True))

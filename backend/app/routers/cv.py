@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 from sqlmodel import Session, select
 
-from ..config import get_settings
+from ..config import JOBTRACKER_HOME, get_settings
 from ..database import get_session
 from ..models import CVProfile
 from ..services.cv_parser import CVParseError, analyze_cv, extract_text
@@ -13,7 +13,8 @@ MAX_CV_BYTES = 10 * 1024 * 1024
 
 @router.post("", response_model=CVProfile)
 async def upload_cv(
-    file: UploadFile = File(...), db: Session = Depends(get_session), llm: LLMClient = Depends(get_llm)
+    background: BackgroundTasks,
+    file: UploadFile = File(...), db: Session = Depends(get_session), llm: LLMClient = Depends(get_llm),
 ):
     content = await file.read()
     if len(content) > MAX_CV_BYTES:
@@ -42,6 +43,10 @@ async def upload_cv(
     db.commit()
     db.refresh(cv)
     (settings.upload_dir / f"cv_{cv.id}_{cv.filename}").write_bytes(content)
+    if JOBTRACKER_HOME:  # app instalada: primera búsqueda en cuanto hay CV, sin esperar a las 3 h
+        from .agent import _run_in_background
+
+        background.add_task(_run_in_background, llm)
     return cv
 
 

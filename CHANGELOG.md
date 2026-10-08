@@ -11,6 +11,8 @@ Las notas de cada versión se muestran dentro de la app al ofrecer la actualizac
   antigüedad, empresas a evitar) antes de gastar en IA.
 - Criba rápida y barata con Claude Haiku y análisis completo solo de las mejores.
 - Aprende de los motivos con los que descartas ofertas.
+- Sin configuración: la primera vez deduce de tu CV la ubicación, las búsquedas y las exclusiones,
+  y en la app instalada lanza la primera búsqueda en cuanto subes el CV.
 
 **Candidaturas listas para enviar**
 - 📥 Bandeja: revisa y aprueba en segundos cada candidatura preparada.

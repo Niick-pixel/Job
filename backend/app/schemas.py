@@ -185,6 +185,16 @@ class SearchPreferences(BaseModel):
     sources: SourcesConfig = Field(default_factory=SourcesConfig)
 
 
+class PreferencesProposal(BaseModel):
+    """Configuración inicial que la IA deduce del CV (el usuario puede editarla después)."""
+    locations: list[str] = Field(description="Ciudad y país del candidato, en español e inglés (p. ej. Madrid, España, Spain)")
+    remote_ok: bool
+    exclude_keywords: list[str] = Field(description="Exclusiones obvias por seniority (p. ej. prácticas, internship)")
+    remotive_queries: list[str] = Field(description="1-3 búsquedas cortas en inglés para un portal remoto, p. ej. 'python backend'")
+    adzuna_queries: list[str] = Field(description="1-3 búsquedas cortas de puesto en el idioma del país del candidato")
+    adzuna_country: str = Field(description="Código ISO de 2 letras del país del candidato en minúscula, p. ej. 'es'")
+
+
 class TriageItem(BaseModel):
     ref: int = Field(description="Número de la oferta en la lista recibida")
     score: int = Field(description="Encaje 0-100")

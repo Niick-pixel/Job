@@ -4,7 +4,11 @@ from sqlmodel import Session, select
 from ..database import get_session
 from ..models import AgentRun, Job, PipelineStatus
 from ..schemas import SearchPreferences
-from ..services.agent import load_preferences, save_preferences
+from ..config import get_settings
+from ..models import CVProfile
+from ..schemas import CVExtraction
+from ..services.agent import autoconfigure_preferences, load_preferences, save_preferences
+from ..services.llm import LLMError
 from ..services.llm import LLMClient, get_llm
 
 router = APIRouter(prefix="/api/agent", tags=["Agente"])
@@ -17,6 +21,20 @@ def get_preferences(db: Session = Depends(get_session)):
 
 @router.put("/preferences", response_model=SearchPreferences)
 def put_preferences(prefs: SearchPreferences, db: Session = Depends(get_session)):
+    return save_preferences(db, prefs)
+
+
+@router.post("/preferences/auto", response_model=SearchPreferences)
+def auto_preferences(db: Session = Depends(get_session), llm: LLMClient = Depends(get_llm)):
+    """Rehace ubicación, búsquedas y exclusiones a partir del CV más reciente (conserva lo demás)."""
+    cv = db.exec(select(CVProfile).order_by(CVProfile.created_at.desc())).first()
+    if not cv:
+        raise HTTPException(409, "Sube primero tu CV")
+    try:
+        prefs = autoconfigure_preferences(llm, get_settings(), CVExtraction.model_validate(cv.profile),
+                                          base=load_preferences(db))
+    except LLMError as e:
+        raise HTTPException(502, str(e)) from e
     return save_preferences(db, prefs)
 
 

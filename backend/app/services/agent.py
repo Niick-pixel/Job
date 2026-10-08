@@ -21,7 +21,7 @@ from sqlmodel import Session, select
 
 from ..config import Settings
 from ..models import AgentRun, CVProfile, EmailEvent, Feedback, Job, MatchResult, PipelineStatus, SearchPreferencesRow
-from ..schemas import CVExtraction, EmailIn, JobExtraction, SearchPreferences, TriageBatch
+from ..schemas import CVExtraction, EmailIn, JobExtraction, PreferencesProposal, SearchPreferences, TriageBatch
 from .job_ingest import analyze_job
 from .llm import LLMClient, LLMError
 from .matcher import evaluate_match
@@ -43,6 +43,32 @@ Las decisiones anteriores del candidato muestran qué le interesa y qué no: res
 def load_preferences(db: Session) -> SearchPreferences:
     row = db.get(SearchPreferencesRow, 1)
     return SearchPreferences.model_validate(row.data) if row else SearchPreferences()
+
+
+def preferences_configured(db: Session) -> bool:
+    return db.get(SearchPreferencesRow, 1) is not None
+
+
+AUTOCONFIG_SYSTEM = """Propones la configuración inicial de un buscador de empleo a partir del CV del candidato.
+Sé conservador: estas reglas descartan ofertas sin pasar por la IA, así que no restrinjas de más.
+No propongas títulos de puesto: la criba con IA ya juzga el encaje con el CV completo."""
+
+
+def autoconfigure_preferences(llm: LLMClient, settings: Settings, cv: CVExtraction,
+                              base: SearchPreferences | None = None) -> SearchPreferences:
+    """Deduce ubicación, búsquedas y exclusiones del CV para que el agente funcione sin configurar nada."""
+    proposal = llm.structured(
+        system=AUTOCONFIG_SYSTEM, prompt=f"<cv>\n{cv.model_dump_json(indent=1)}\n</cv>",
+        schema=PreferencesProposal, model=settings.llm_fast_model, effort="low", max_tokens=4000,
+    )
+    prefs = (base or SearchPreferences()).model_copy(deep=True)
+    prefs.locations = proposal.locations
+    prefs.remote_ok = proposal.remote_ok
+    prefs.exclude_keywords = sorted(set(prefs.exclude_keywords) | set(proposal.exclude_keywords))
+    prefs.sources.remotive_queries = proposal.remotive_queries[:3]
+    prefs.sources.adzuna_queries = proposal.adzuna_queries[:3]
+    prefs.sources.adzuna_country = (proposal.adzuna_country or "es").lower()[:2]
+    return prefs
 
 
 def save_preferences(db: Session, prefs: SearchPreferences) -> SearchPreferences:
@@ -186,6 +212,9 @@ def run_agent(
         if not cv_row:
             raise LLMError("Sube tu CV para que el agente sepa qué buscar")
         cv = CVExtraction.model_validate(cv_row.profile)
+        if not preferences_configured(db):  # primera vez: se configura solo a partir del CV
+            prefs = save_preferences(db, autoconfigure_preferences(llm, settings, cv))
+            stats["autoconfigurado"] = True
 
         # 1. Fuentes
         raws: list[RawJob] = []

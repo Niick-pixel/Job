@@ -171,6 +171,9 @@ def agent_llm() -> FakeLLM:
         suggested_headline="Backend Engineer · Python", cover_letter="Estimado equipo…", honesty_warnings=["Kubernetes"])
     llm.responses[schemas.TailoredAnswers] = lambda system, prompt: schemas.TailoredAnswers(answers=[
         schemas.TailoredAnswer(key="expectativa_salarial", question="¿Salario?", answer="50.000 € brutos/año")])
+    llm.responses[schemas.PreferencesProposal] = schemas.PreferencesProposal(
+        locations=["Madrid", "España", "Spain"], remote_ok=True, exclude_keywords=["prácticas", "internship"],
+        remotive_queries=["python backend"], adzuna_queries=["desarrollador python"], adzuna_country="ES")
     llm.responses[schemas.AlertExtraction] = schemas.AlertExtraction(jobs=[
         schemas.AlertJob(title="Python Developer", company="Fintechly", location="Madrid",
                          url="https://linkedin.com/jobs/view/1", snippet="Python, Django")])
@@ -305,3 +308,44 @@ def test_old_database_gets_new_columns(tmp_path):
         job = s.exec(select(Job)).one()
         assert job.title == "Antigua" and job.pipeline_status == "manual" and job.source == "manual"
     add_missing_columns(engine)  # idempotente
+
+
+# ── Configuración automática a partir del CV ───────────────────
+
+
+def test_first_run_autoconfigures_from_cv(db):
+    from app.services.agent import load_preferences, preferences_configured
+
+    assert not preferences_configured(db)
+    llm = agent_llm()
+    run = run_agent(db, llm, get_settings(), http_client=transport(), prepare=prepare_package)
+    assert run.status == "ok", run.error
+    assert run.stats["autoconfigurado"] is True
+    prefs = load_preferences(db)
+    assert prefs.locations == ["Madrid", "España", "Spain"]
+    assert prefs.sources.remotive_queries == ["python backend"] and prefs.sources.adzuna_country == "es"
+    assert "internship" in prefs.exclude_keywords and prefs.target_titles == []  # sin títulos: no restringe de más
+    # La configuración se hizo con el modelo rápido y la búsqueda ya usó la fuente propuesta
+    i = llm.calls.index(schemas.PreferencesProposal)
+    assert llm.kwargs[i]["model"] == "claude-haiku-5-5"
+    assert run.stats["fuentes"] == {"remotive:python backend": 1, "adzuna": run.stats["fuentes"]["adzuna"]}
+
+    # Segunda pasada: ya está configurado, no se vuelve a proponer
+    n = llm.calls.count(schemas.PreferencesProposal)
+    run_agent(db, llm, get_settings(), http_client=transport())
+    assert llm.calls.count(schemas.PreferencesProposal) == n
+
+
+def test_regenerate_preferences_keeps_user_choices(client, fake_llm, tmp_path):
+    fake_llm.responses.update(agent_llm().responses)
+    assert client.post("/api/agent/preferences/auto").status_code == 409  # sin CV
+    with open(tmp_path / "cv.txt", "w") as f:
+        f.write("x" * 100)
+    with open(tmp_path / "cv.txt", "rb") as f:
+        client.post("/api/cv", files={"file": ("cv.txt", f, "text/plain")})
+    client.put("/api/agent/preferences", json={**SearchPreferences().model_dump(),
+                                              "blacklist_companies": ["BigConsulting"], "exclude_keywords": ["guardias"]})
+    prefs = client.post("/api/agent/preferences/auto").json()
+    assert prefs["blacklist_companies"] == ["BigConsulting"]
+    assert set(prefs["exclude_keywords"]) == {"guardias", "prácticas", "internship"}
+    assert prefs["locations"] == ["Madrid", "España", "Spain"]

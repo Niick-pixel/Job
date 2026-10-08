@@ -22,6 +22,8 @@ Fuentes ──► duplicados ──► filtros duros ──► criba rápida ─
 - **Fuentes**: Greenhouse, Lever y Ashby (APIs públicas por empresa), Remotive, Adzuna (API key gratuita)
   y tus **alertas de empleo por correo** (LinkedIn, InfoJobs, Indeed…). LinkedIn no se rasca ni se automatiza:
   su acuerdo de usuario lo prohíbe; leer las alertas que ya recibes es la vía segura.
+- **Sin configurar nada**: la primera vez deduce de tu CV ubicación, búsquedas y exclusiones (con Claude Haiku),
+  y al subir el CV en la app instalada lanza la primera búsqueda al momento. Todo es editable en 🤖 Agente.
 - **Aprende**: los motivos con los que descartas candidaturas se tienen en cuenta en las siguientes cribas.
 - **Honesto**: el CV adaptado solo reordena y reformula lo que ya está en tu CV; las preguntas de filtro
   sin respuesta base quedan pendientes en vez de inventarse.
