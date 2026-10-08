@@ -27,7 +27,8 @@ Fuentes ──► duplicados ──► filtros duros ──► criba rápida ─
 - **Aprende**: los motivos con los que descartas candidaturas se tienen en cuenta en las siguientes cribas.
 - **Honesto**: el CV adaptado solo reordena y reformula lo que ya está en tu CV; las preguntas de filtro
   sin respuesta base quedan pendientes en vez de inventarse.
-- **Barato**: la criba usa Claude Haiku con el perfil en caché; el modelo principal solo trabaja con las finalistas.
+- **Barato**: por defecto usa el perfil **Económico** (Claude Haiku en todo, ≈ 0,50 $/mes con uso normal);
+  en Ajustes puedes pasar a Equilibrado (≈ 5 $) o Máxima calidad (≈ 12 $). La criba usa el perfil en caché.
 - Nada entra al Kanban ni se envía sin tu aprobación.
 
 ![Bandeja](docs/bandeja.png)
@@ -198,14 +199,15 @@ Correo ─Claude─► EmailClassification ─► mueve la tarjeta del Kanban + 
 | Variable | Por defecto | Descripción |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | — | Clave de la API de Claude |
-| `LLM_MODEL` | `claude-opus-5-5` | Modelo (`claude-sonnet-5-5` / `claude-haiku-5-5` son más baratos) |
-| `LLM_EFFORT` | `medium` | Profundidad de razonamiento: `low`…`max` |
+| `LLM_MODEL` | `claude-haiku-5-5` | Modelo principal (perfil económico). Más calidad: `claude-sonnet-5-5`, `claude-opus-5-5` |
+| `LLM_EFFORT` | `low` | Profundidad de razonamiento: `low`…`max` |
 | `DATABASE_URL` | `sqlite:///./data/jobtracker.db` | Cualquier URL SQLAlchemy (Postgres incluido) |
 | `UPLOAD_DIR` | `./data/uploads` | Dónde se guardan los CV originales |
 | `MATCH_LLM_WEIGHT` | `0.7` | Peso del juicio de la IA en el score |
 | `EMAIL_MODE` | `simulated` | `simulated` o `gmail` |
 | `GMAIL_*` | — | Rutas de credenciales/token y consulta de Gmail |
 | `LLM_FAST_MODEL` | `claude-haiku-5-5` | Modelo de la criba masiva de ofertas |
+| `COST_PROFILE` | `economico` | Perfil de gasto elegido en Ajustes (lo gestiona la app) |
 | `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` | — | Credenciales gratuitas de developer.adzuna.com (opcional) |
 
 ## API principal

@@ -40,7 +40,7 @@ KNOWN_KEYS = [
 ]
 KNOWN = {k["name"] for k in KNOWN_KEYS}
 # Variables de configuración que no son secretos (se gestionan en otras secciones)
-CONFIG_VARS = {"LLM_MODEL", "LLM_FAST_MODEL", "LLM_EFFORT", "EMAIL_MODE", "DATABASE_URL", "UPLOAD_DIR",
+CONFIG_VARS = {"LLM_MODEL", "LLM_FAST_MODEL", "LLM_EFFORT", "COST_PROFILE", "EMAIL_MODE", "DATABASE_URL", "UPLOAD_DIR",
                "MATCH_LLM_WEIGHT", "BACKEND_URL", "GMAIL_CREDENTIALS_FILE", "GMAIL_TOKEN_FILE", "GMAIL_QUERY"}
 
 MODELS = [
@@ -49,6 +49,28 @@ MODELS = [
     {"id": "claude-haiku-5-5", "label": "Claude Haiku 5.5", "note": "El más rápido y barato"},
 ]
 EFFORTS = ["low", "medium", "high", "xhigh", "max"]
+
+# Perfiles de gasto. Estimación mensual con ~100 ofertas cribadas al día y ~2 candidaturas preparadas
+# al día, a precios de API de Claude (Haiku 5.5 $0,10/$0,50 · Sonnet 5.5 $2/$10 · Opus 5.5 $4/$20 por
+# millón de tokens de entrada/salida). La criba usa siempre el modelo rápido.
+PRESETS = [
+    {"id": "economico", "label": "Económico", "estimate": "≈ 0,50 $ al mes",
+     "note": "Claude Haiku en todo, razonamiento mínimo. Cartas algo menos pulidas.",
+     "model": "claude-haiku-5-5", "fast_model": "claude-haiku-5-5", "effort": "low"},
+    {"id": "equilibrado", "label": "Equilibrado", "estimate": "≈ 5 $ al mes",
+     "note": "Sonnet para las candidaturas, Haiku para la criba.",
+     "model": "claude-sonnet-5-5", "fast_model": "claude-haiku-5-5", "effort": "low"},
+    {"id": "calidad", "label": "Máxima calidad", "estimate": "≈ 12 $ al mes",
+     "note": "Opus para las candidaturas, Haiku para la criba.",
+     "model": "claude-opus-5-5", "fast_model": "claude-haiku-5-5", "effort": "medium"},
+]
+
+
+def current_profile(model: str, fast_model: str, effort: str) -> str:
+    for p in PRESETS:
+        if (p["model"], p["fast_model"], p["effort"]) == (model, fast_model, effort):
+            return p["id"]
+    return "personalizado"
 THEMES = ["auto", "porcelana", "grafito", "oceano", "bosque", "atardecer", "lavanda", "medianoche", "arena"]
 
 
@@ -148,7 +170,8 @@ class AIConfig(BaseModel):
 def get_ai():
     s = get_settings()
     return {"model": s.llm_model, "fast_model": s.llm_fast_model, "effort": s.llm_effort,
-            "models": MODELS, "efforts": EFFORTS}
+            "profile": current_profile(s.llm_model, s.llm_fast_model, s.llm_effort),
+            "presets": PRESETS, "models": MODELS, "efforts": EFFORTS}
 
 
 @router.put("/ai")
@@ -156,8 +179,26 @@ def put_ai(cfg: AIConfig):
     ids = {m["id"] for m in MODELS}
     if cfg.model not in ids or cfg.fast_model not in ids or cfg.effort not in EFFORTS:
         raise HTTPException(422, "Modelo o esfuerzo no válidos")
-    write_env({"LLM_MODEL": cfg.model, "LLM_FAST_MODEL": cfg.fast_model, "LLM_EFFORT": cfg.effort})
+    write_env({"LLM_MODEL": cfg.model, "LLM_FAST_MODEL": cfg.fast_model, "LLM_EFFORT": cfg.effort,
+               "COST_PROFILE": current_profile(cfg.model, cfg.fast_model, cfg.effort)})
     return get_ai()
+
+
+def migrate_cost_profile() -> str | None:
+    """Una sola vez: las instalaciones con los valores de fábrica antiguos (Opus + esfuerzo medio,
+    escritos por el instalador ≤ 0.4.0) pasan al perfil económico. Si el usuario eligió otra cosa,
+    se respeta. COST_PROFILE marca que la migración ya se hizo."""
+    env = read_env()
+    if env.get("COST_PROFILE"):
+        return None
+    model, effort = env.get("LLM_MODEL"), env.get("LLM_EFFORT")
+    if model in (None, "claude-opus-5-5") and effort in (None, "medium") and env.get("LLM_FAST_MODEL") in (None, "claude-haiku-5-5"):
+        eco = PRESETS[0]
+        write_env({"LLM_MODEL": eco["model"], "LLM_FAST_MODEL": eco["fast_model"], "LLM_EFFORT": eco["effort"],
+                   "COST_PROFILE": eco["id"]})
+        return eco["id"]
+    write_env({"COST_PROFILE": current_profile(model or "", env.get("LLM_FAST_MODEL") or "", effort or "")})
+    return None
 
 
 # ── Apariencia ──────────────────────────────────────────────────

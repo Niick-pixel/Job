@@ -2,6 +2,13 @@
 
 Las notas de cada versión se muestran dentro de la app al ofrecer la actualización.
 
+## 0.4.1
+
+- **Modo económico por defecto**: Claude Haiku en todo con el razonamiento mínimo (≈ 0,50 $ al mes con
+  uso normal). Las instalaciones con la configuración de fábrica anterior (Opus) pasan a él solas.
+- Perfiles de gasto en Ajustes → Inteligencia artificial: Económico, Equilibrado y Máxima calidad,
+  con su coste estimado. Si eliges otro, se respeta y no se vuelve a cambiar.
+
 ## 0.4.0
 
 **Aplicación de escritorio**

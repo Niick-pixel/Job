@@ -19,8 +19,10 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=_ENV_FILES, extra="ignore")
 
     anthropic_api_key: str | None = None
-    llm_model: str = "claude-opus-5-5"
-    llm_effort: str = "medium"
+    # Perfil «Económico» por defecto: Haiku en todo con razonamiento mínimo (≈ 0,50 $/mes).
+    # Se cambia en Ajustes → Inteligencia artificial.
+    llm_model: str = "claude-haiku-5-5"
+    llm_effort: str = "low"
     # Modelo rápido y barato para la criba masiva de ofertas
     llm_fast_model: str = "claude-haiku-5-5"
 

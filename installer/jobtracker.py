@@ -695,7 +695,8 @@ def cmd_install(args, paths: Paths) -> None:
         if not paths.env_file.exists():
             paths.env_file.write_text(
                 "# Configuración de JobTracker AI (se conserva entre actualizaciones)\n"
-                "ANTHROPIC_API_KEY=\nLLM_MODEL=claude-opus-5-5\nLLM_EFFORT=medium\nEMAIL_MODE=simulated\n"
+                "ANTHROPIC_API_KEY=\nLLM_MODEL=claude-haiku-5-5\nLLM_FAST_MODEL=claude-haiku-5-5\nLLM_EFFORT=low\n"
+                "COST_PROFILE=economico\nEMAIL_MODE=simulated\n"
             )
             paths.env_file.chmod(0o600)
 

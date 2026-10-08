@@ -22,6 +22,8 @@ SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
+    if settings.migrate_cost_profile():
+        print("[ajustes] instalación pasada al perfil económico (Claude Haiku)")
     yield
 
 

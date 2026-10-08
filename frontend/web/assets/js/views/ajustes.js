@@ -142,19 +142,40 @@ function aiSection(ai) {
     options.map((o) => h("option", { value: o.id ?? o, selected: (o.id ?? o) === value }, o.label ? `${o.label} — ${o.note}` : o)));
   const model = select(ai.model, ai.models);
   const fast = select(ai.fast_model, ai.models);
-  const effortLabels = { low: "Bajo · más rápido y barato", medium: "Medio · recomendado", high: "Alto", xhigh: "Muy alto", max: "Máximo · más lento y caro" };
+  const effortLabels = { low: "Bajo · más rápido y barato", medium: "Medio", high: "Alto", xhigh: "Muy alto", max: "Máximo · más lento y caro" };
   const effort = select(ai.effort, ai.efforts.map((e) => ({ id: e, label: effortLabels[e]?.split(" · ")[0] || e, note: effortLabels[e]?.split(" · ")[1] || "" })));
+
+  const cards = h("div", { class: "presets" });
+  const drawPresets = (active) => cards.replaceChildren(...ai.presets.map((p) => h("button", {
+    type: "button", class: `preset ${p.id === active ? "active" : ""}`, "aria-pressed": String(p.id === active),
+    onClick: async () => {
+      const r = await api.put("/api/settings/ai", { model: p.model, fast_model: p.fast_model, effort: p.effort });
+      model.value = r.model; fast.value = r.fast_model; effort.value = r.effort;
+      drawPresets(r.profile);
+      toast(`Perfil «${p.label}» activado`);
+    },
+  }, h("span", { class: "row between" }, h("b", {}, p.label), icon("check")),
+    h("span", { class: "preset-price" }, p.estimate),
+    h("span", { class: "faint small" }, p.note))));
+  drawPresets(ai.profile);
+
   return section("Inteligencia artificial",
     h("section", { class: "card stack" },
-      h("div", { class: "grid-2" },
-        field("Modelo principal", model, "Análisis completo, CV adaptado y cartas"),
-        field("Modelo rápido", fast, "Criba masiva de ofertas (barato)")),
-      field("Nivel de razonamiento", effort, "Más razonamiento = mejores resultados, más tiempo y coste"),
-      h("div", { class: "row", style: { justifyContent: "flex-end" } },
-        button("Guardar", { kind: "primary", ico: "check", onClick: async () => {
-          await api.put("/api/settings/ai", { model: model.value, fast_model: fast.value, effort: effort.value });
-          toast("Modelo actualizado");
-        } }))));
+      h("p", { class: "muted small center" }, "Elige cuánto quieres gastar en la API de Claude. Estimación con ~100 ofertas cribadas y ~2 candidaturas al día."),
+      cards,
+      h("details", { class: "disclosure" },
+        h("summary", {}, icon("chevron", "chev"), "Personalizar modelos"),
+        h("div", { class: "body stack" },
+          h("div", { class: "grid-2" },
+            field("Modelo principal", model, "Análisis completo, CV adaptado y cartas"),
+            field("Modelo rápido", fast, "Criba masiva de ofertas")),
+          field("Nivel de razonamiento", effort, "Más razonamiento = mejores resultados, más tiempo y coste"),
+          h("div", { class: "row", style: { justifyContent: "flex-end" } },
+            button("Guardar", { kind: "primary", ico: "check", onClick: async () => {
+              const r = await api.put("/api/settings/ai", { model: model.value, fast_model: fast.value, effort: effort.value });
+              drawPresets(r.profile);
+              toast(r.profile === "personalizado" ? "Configuración personalizada guardada" : "Modelo actualizado");
+            } }))))));
 }
 
 // ── Gmail ────────────────────────────────────────────────────────

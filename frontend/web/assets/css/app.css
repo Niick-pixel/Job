@@ -324,6 +324,21 @@ details.disclosure > .body { padding: 0 0 14px; animation: enter var(--t) var(--
 .theme-name svg { width: 15px; height: 15px; color: var(--accent); opacity: 0; transform: scale(0.6); transition: opacity var(--t), transform var(--t) var(--ease-out); }
 .theme-swatch.active .theme-name svg { opacity: 1; transform: scale(1); }
 
+/* ── Perfiles de gasto ──────────────────────────────────────── */
+
+.presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.preset {
+  all: unset; box-sizing: border-box; cursor: pointer; display: grid; gap: 4px; align-content: start;
+  padding: 14px 16px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface);
+  transition: transform var(--t) var(--ease), box-shadow var(--t), border-color var(--t), background var(--t);
+}
+.preset:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.preset.active { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 3px var(--accent-soft); }
+.preset:focus-visible { box-shadow: 0 0 0 3px var(--accent-soft), 0 0 0 1px var(--accent); }
+.preset svg { color: var(--accent); opacity: 0; transform: scale(0.6); transition: opacity var(--t), transform var(--t) var(--ease-out); }
+.preset.active svg { opacity: 1; transform: scale(1); }
+.preset-price { font-size: 18px; font-weight: 650; letter-spacing: -0.02em; color: var(--accent); }
+
 /* ── Avisos (toasts) ────────────────────────────────────────── */
 
 .toasts { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); display: grid; gap: 8px; z-index: 50; pointer-events: none; }
@@ -369,5 +384,6 @@ details.disclosure > .body { padding: 0 0 14px; animation: enter var(--t) var(--
   .brand small, .brand b { display: none; }
   .grid-2, .grid-3 { grid-template-columns: 1fr; }
   .themes { grid-template-columns: repeat(2, 1fr); }
+  .presets { grid-template-columns: 1fr; }
   .board { grid-template-columns: 1fr; }
 }

@@ -162,3 +162,44 @@ def test_desktop_window_background(tmp_path, monkeypatch):
     (tmp_path / "ui.json").write_text('{"theme": "auto"}')
     monkeypatch.setattr(desktop, "_system_dark", lambda: True)
     assert desktop.window_background() == desktop.THEME_BG["grafito"]
+
+
+# ── Perfiles de gasto y migración al modo económico ────────────
+
+
+def test_default_is_cheapest_profile(client):
+    get_settings.cache_clear()
+    ai = client.get("/api/settings/ai").json()
+    assert (ai["model"], ai["fast_model"], ai["effort"]) == ("claude-haiku-5-5", "claude-haiku-5-5", "low")
+    assert ai["profile"] == "economico" and [p["id"] for p in ai["presets"]] == ["economico", "equilibrado", "calidad"]
+
+
+def test_choosing_a_preset_and_custom(client):
+    calidad = next(p for p in client.get("/api/settings/ai").json()["presets"] if p["id"] == "calidad")
+    r = client.put("/api/settings/ai", json={"model": calidad["model"], "fast_model": calidad["fast_model"],
+                                             "effort": calidad["effort"]})
+    assert r.json()["profile"] == "calidad" and secrets.read_env()["COST_PROFILE"] == "calidad"
+    r = client.put("/api/settings/ai", json={"model": "claude-opus-5-5", "fast_model": "claude-sonnet-5-5", "effort": "max"})
+    assert r.json()["profile"] == "personalizado"
+
+
+@pytest.mark.parametrize("before,expected_model,migrated", [
+    # .env escrito por el instalador ≤ 0.4.0 → pasa a económico
+    ("ANTHROPIC_API_KEY=sk-ant-x\nLLM_MODEL=claude-opus-5-5\nLLM_EFFORT=medium\n", "claude-haiku-5-5", True),
+    # .env sin modelo (desarrollo) → económico
+    ("ANTHROPIC_API_KEY=sk-ant-x\n", "claude-haiku-5-5", True),
+    # el usuario eligió otra cosa → se respeta
+    ("LLM_MODEL=claude-opus-5-5\nLLM_EFFORT=high\n", "claude-opus-5-5", False),
+    # ya migrado y luego vuelto a Opus a propósito → no se vuelve a tocar
+    ("LLM_MODEL=claude-opus-5-5\nLLM_EFFORT=medium\nCOST_PROFILE=calidad\n", "claude-opus-5-5", False),
+])
+def test_cost_profile_migration(isolated_env, before, expected_model, migrated):
+    from app.routers.settings import migrate_cost_profile
+
+    isolated_env.write_text(before)
+    assert (migrate_cost_profile() == "economico") is migrated
+    env = secrets.read_env()
+    assert env.get("LLM_MODEL", "claude-haiku-5-5") == expected_model
+    assert env["COST_PROFILE"]  # siempre queda marcada: nunca se repite
+    assert env.get("ANTHROPIC_API_KEY", "sk-ant-x") == "sk-ant-x"  # no toca la clave
+    assert migrate_cost_profile() is None  # idempotente
