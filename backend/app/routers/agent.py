@@ -1,4 +1,5 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from ..database import get_session
@@ -12,6 +13,33 @@ from ..services.llm import LLMError
 from ..services.llm import LLMClient, get_llm
 
 router = APIRouter(prefix="/api/agent", tags=["Agente"])
+
+
+def get_http_client():
+    """Cliente HTTP para consultar las APIs públicas (sustituible en los tests)."""
+    import httpx
+
+    with httpx.Client(follow_redirects=True) as client:
+        yield client
+
+
+class DiscoverIn(BaseModel):
+    companies: list[str]
+
+
+@router.post("/discover")
+def discover_companies(payload: DiscoverIn, client=Depends(get_http_client)):
+    """Busca en qué ATS (Greenhouse, Lever, Ashby) publica cada empresa. El usuario confirma después."""
+    from ..services.discovery import MAX_COMPANIES, discover
+
+    names = [c for c in payload.companies if c.strip()]
+    if not names:
+        raise HTTPException(422, "Escribe al menos una empresa")
+    if len(names) > MAX_COMPANIES:
+        raise HTTPException(422, f"Como máximo {MAX_COMPANIES} empresas a la vez")
+    found = discover(client, names)
+    missing = sorted({n.strip() for n in names} - {b["query"] for b in found})
+    return {"found": found, "missing": missing}
 
 
 @router.get("/preferences", response_model=SearchPreferences)
@@ -80,3 +108,11 @@ def pipeline_jobs(status: str | None = None, limit: int = 100, db: Session = Dep
          "urgency": (j.urgency or {}).get("level")}
         for j in jobs
     ]
+
+
+@router.get("/digest", tags=["Resumen"])
+def digest(db: Session = Depends(get_session)):
+    """Lo que merece atención hoy (tarjeta «Hoy» de la Bandeja)."""
+    from ..services.digest import build_digest
+
+    return build_digest(db)

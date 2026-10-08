@@ -204,6 +204,14 @@ export function tagInput(values = [], placeholder = "Escribe y pulsa Enter") {
   box.addEventListener("click", () => input.focus());
   render();
   Object.defineProperty(box, "value", { get: () => { if (input.value.trim()) commit(); return [...tags]; } });
+  box.add = (v) => {
+    if (tags.includes(v)) return false;
+    tags.push(v);
+    render();
+    box.lastElementChild.previousElementSibling?.animate(
+      [{ transform: "scale(0.6)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 260, easing: "cubic-bezier(.2,.8,.2,1)" });
+    return true;
+  };
   return box;
 }
 

@@ -32,7 +32,7 @@ export function agentButton(label = "Buscar ahora", after) {
 
 /** Aviso si falta algo imprescindible (CV o clave de Claude). */
 export async function setupBanner(ctx) {
-  const keys = await api.get("/api/settings/keys").catch(() => null);
+  const [keys] = await Promise.all([api.get("/api/settings/keys").catch(() => null), ctx.refreshCv()]);
   const claude = keys?.keys.find((k) => k.name === "ANTHROPIC_API_KEY");
   const steps = [];
   if (!claude?.configured) steps.push(["key", "Añade tu clave de Claude", "ajustes"]);

@@ -1,5 +1,6 @@
 // ⚙️ Ajustes: apariencia, claves API, modelo de IA, Gmail y versión.
 import { api } from "../api.js";
+import { bookmarkletCode, bookmarkletHref } from "../bookmarklet.js";
 import { THEMES, setMotion, setTheme } from "../theme.js";
 import { button, field, h, icon, pageHead, stagger, toast, toggle } from "../ui.js";
 
@@ -13,6 +14,7 @@ export async function render(root, ctx) {
     keysSection(keys, root, ctx),
     customKeys(keys, root, ctx),
     aiSection(ai),
+    browserSection(),
     gmailSection(gmail, root, ctx),
     about(version, keys))));
 }
@@ -176,6 +178,25 @@ function aiSection(ai) {
               drawPresets(r.profile);
               toast(r.profile === "personalizado" ? "Configuración personalizada guardada" : "Modelo actualizado");
             } }))))));
+}
+
+// ── Guardar desde el navegador ───────────────────────────────────
+function browserSection() {
+  const drag = h("a", { class: "btn", href: bookmarkletHref(location.origin), title: "Arrástrame a la barra de favoritos del navegador",
+    onClick: (e) => { e.preventDefault(); toast("Arrástralo a la barra de favoritos del navegador"); } },
+    icon("plus"), h("span", {}, "Guardar en JobTracker"));
+  return section("Navegador",
+    h("section", { class: "card stack" },
+      h("div", {}, h("h3", {}, "Guardar ofertas desde el navegador"),
+        h("p", { class: "muted small", style: { marginTop: "2px" } },
+          "Un botón en la barra de favoritos de Safari o Chrome envía a JobTracker la oferta que estés viendo: LinkedIn, InfoJobs, Indeed o la web de cualquier empresa.")),
+      h("div", { class: "row" },
+        h("a", { class: "btn primary", href: "/capture", target: "_blank", rel: "noopener" }, icon("external"), h("span", {}, "Instalar en mi navegador")),
+        drag,
+        button("Copiar código", { kind: "ghost", ico: "file", onClick: async () => {
+          await navigator.clipboard.writeText(bookmarkletCode(location.origin)); toast("Código copiado");
+        } })),
+      h("p", { class: "faint small" }, "«Instalar en mi navegador» abre una guía en tu navegador desde la que arrastras el botón a la barra de favoritos.")));
 }
 
 // ── Gmail ────────────────────────────────────────────────────────

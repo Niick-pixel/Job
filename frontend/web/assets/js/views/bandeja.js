@@ -14,8 +14,9 @@ export async function render(root, ctx) {
   const approvedSlot = h("div");
   root.replaceChildren(head, skeletons(2));
 
-  const [pending, approved, banner] = await Promise.all([
+  const [pending, approved, banner, digest] = await Promise.all([
     ctx.refreshCounts(), api.get("/api/packages", { status: "aprobada" }), setupBanner(ctx),
+    api.get("/api/agent/digest").catch(() => null),
   ]);
 
   const setSubtitle = () => {
@@ -26,9 +27,25 @@ export async function render(root, ctx) {
   };
 
   for (const pkg of pending) list_.append(packageCard(pkg, ctx, setSubtitle));
-  root.replaceChildren(head, banner || "", pending.length ? stagger(list_) : emptyState(ctx), approvedSlot);
+  root.replaceChildren(head, banner || "", todayCard(digest, ctx) || "", pending.length ? stagger(list_) : emptyState(ctx), approvedSlot);
   setSubtitle();
   renderApproved(approvedSlot, approved);
+}
+
+/** Tarjeta «Hoy»: entrevistas próximas y candidaturas que necesitan seguimiento. */
+function todayCard(d, ctx) {
+  if (!d || (!d.interviews.length && !d.stale.length && !d.approved_unsent)) return null;
+  const when = (iso) => new Date(iso).toLocaleString("es-ES", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  const item = (ico, kind, main, sub, route) => h("button", {
+    type: "button", class: "btn ghost", style: { width: "100%", justifyContent: "flex-start", height: "auto", padding: "8px 10px", textAlign: "left" },
+    onClick: () => ctx.go(route),
+  }, h("span", { class: `chip ${kind}`, style: { width: "30px", justifyContent: "center", padding: 0 } }, icon(ico)),
+  h("span", { style: { flex: 1, minWidth: 0 } }, h("b", {}, main), h("span", { class: "muted" }, ` · ${sub}`)));
+  return h("section", { class: "card", style: { marginBottom: "18px", padding: "14px 16px" } },
+    h("p", { class: "faint small", style: { textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, margin: "0 0 6px 10px" } }, "Hoy"),
+    d.interviews.map((i) => item("calendar", "warn", `Entrevista · ${i.company || i.title}`, when(i.at), "kanban")),
+    d.approved_unsent ? item("send", "accent", `${d.approved_unsent} aprobada${d.approved_unsent > 1 ? "s" : ""} sin enviar`, "abajo en esta página", "bandeja") : null,
+    d.stale.slice(0, 3).map((s) => item("clock", "", `Sin respuesta · ${s.company || s.title}`, `hace ${s.days} días: buen momento para un seguimiento`, "kanban")));
 }
 
 function emptyState(ctx) {

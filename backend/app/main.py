@@ -58,12 +58,22 @@ def health():
     return {"status": "ok"}
 
 
-@app.get("/", response_class=HTMLResponse, include_in_schema=False)
-def index():
-    """Sirve la interfaz con el tema ya aplicado (sin parpadeo) y los assets versionados
+def _page(name: str) -> HTMLResponse:
+    """Sirve una página con el tema ya aplicado (sin parpadeo) y los assets versionados
     (cada actualización OTA invalida la caché de la ventana)."""
-    html = (WEB_DIR / "index.html").read_text(encoding="utf-8")
+    html = (WEB_DIR / name).read_text(encoding="utf-8")
     ui = settings.load_ui()
     html = html.replace("{{THEME}}", ui.theme).replace("{{VERSION}}", VERSION) \
         .replace("{{MOTION}}", "reduce" if ui.reduce_motion else "full")
     return HTMLResponse(html, headers={"Cache-Control": "no-store"})
+
+
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
+def index():
+    return _page("index.html")
+
+
+@app.get("/capture", response_class=HTMLResponse, include_in_schema=False)
+def capture():
+    """Destino del botón «Guardar en JobTracker» del navegador (los datos van en el #fragmento)."""
+    return _page("capture.html")

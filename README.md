@@ -24,6 +24,9 @@ Fuentes ──► duplicados ──► filtros duros ──► criba rápida ─
   su acuerdo de usuario lo prohíbe; leer las alertas que ya recibes es la vía segura.
 - **Sin configurar nada**: la primera vez deduce de tu CV ubicación, búsquedas y exclusiones (con Claude Haiku),
   y al subir el CV en la app instalada lanza la primera búsqueda al momento. Todo es editable en 🤖 Agente.
+- **Descubre empresas**: escribe nombres y encuentra sus portales de Greenhouse, Lever o Ashby (Agente → Dónde busca).
+- **Desde el navegador**: botón «Guardar en JobTracker» para la barra de favoritos (Ajustes → Navegador).
+- **Resumen diario**: notificación cada mañana y tarjeta «Hoy» en la Bandeja.
 - **Aprende**: los motivos con los que descartas candidaturas se tienen en cuenta en las siguientes cribas.
 - **Honesto**: el CV adaptado solo reordena y reformula lo que ya está en tu CV; las preguntas de filtro
   sin respuesta base quedan pendientes en vez de inventarse.
@@ -58,7 +61,8 @@ jobtracker update | rollback      # actualizar ya / volver a la versión anterio
 jobtracker config auto-update off # desactivar actualizaciones automáticas
 jobtracker config start-at-login on
 jobtracker run agent              # ejecuta el agente de búsqueda ahora (en primer plano)
-jobtracker logs backend           # backend | updater | agent | desktop
+jobtracker run digest --force     # (prueba) envía ahora el resumen diario
+jobtracker logs backend           # backend | updater | agent | desktop | digest
 jobtracker uninstall --keep-data
 ```
 
@@ -230,6 +234,9 @@ Correo ─Claude─► EmailClassification ─► mueve la tarjeta del Kanban + 
 | POST | `/api/packages/{id}/decision` | `aprobada` · `enviada` · `descartada` (+ motivo) |
 | GET | `/api/packages/{id}/cv.pdf` | CV adaptado en PDF |
 | GET/PUT | `/api/answers` | Banco de respuestas a preguntas de filtro |
+| POST | `/api/agent/discover` | Busca los portales (Greenhouse/Lever/Ashby) de una lista de empresas |
+| GET | `/api/agent/digest` | Resumen «Hoy»: entrevistas, aprobadas sin enviar, seguimientos |
+| GET | `/capture` | Página de destino del botón del navegador (datos en el `#fragmento`) |
 
 ## Próximos pasos sugeridos
 

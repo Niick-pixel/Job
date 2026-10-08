@@ -95,7 +95,15 @@ def test_launchd_plists():
     assert agent["ProgramArguments"][-2:] == ["run", "agent"]
     assert agent["StartInterval"] == 3 * 3600 and agent["RunAtLoad"] is False and "KeepAlive" not in agent
     assert services.plist("updater")["RunAtLoad"] is True
-    assert set(jt.Services.SCHEDULED) == {"updater", "agent"}
+    digest = services.plist("digest")
+    assert digest["ProgramArguments"][-2:] == ["run", "digest"] and digest["StartInterval"] == 3600
+    assert set(jt.Services.SCHEDULED) == {"updater", "agent", "digest"}
+
+
+def test_run_passes_extra_arguments():
+    args = jt.build_parser().parse_args(["run", "digest", "--force"])
+    assert (args.service, args.extra) == ("digest", ["--force"])
+    assert jt.build_parser().parse_args(["run", "backend"]).extra == []
 
 
 # ── Extremo a extremo ──────────────────────────────────────────

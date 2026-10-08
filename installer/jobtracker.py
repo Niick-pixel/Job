@@ -49,6 +49,7 @@ DEFAULT_MANIFEST_URL = "https://github.com/Niick-pixel/Job/releases/latest/downl
 BACKEND_PORT = 8000
 CHECK_INTERVAL_SECONDS = 6 * 3600
 AGENT_INTERVAL_SECONDS = 3 * 3600
+DIGEST_INTERVAL_SECONDS = 3600  # comprueba cada hora; el resumen se envía una vez al día a la hora elegida
 KEEP_VERSIONS = 2
 IS_MAC = sys.platform == "darwin"
 
@@ -370,9 +371,9 @@ def service_env(paths: Paths) -> dict[str, str]:
 
 
 class Services:
-    NAMES = ("backend", "updater", "agent")
+    NAMES = ("backend", "updater", "agent", "digest")
     OBSOLETE = ("frontend",)  # Streamlit (≤ 0.3.0): sustituido por la ventana nativa
-    SCHEDULED = ("updater", "agent")  # tareas periódicas, independientes de que la app esté abierta
+    SCHEDULED = ("updater", "agent", "digest")  # tareas periódicas, independientes de que la app esté abierta
 
     def __init__(self, paths: Paths, state: dict):
         self.paths, self.state = paths, state
@@ -409,6 +410,9 @@ class Services:
             # Busca y prepara candidaturas cada 3 h aunque la app esté cerrada
             return {**common, "ProcessType": "Background", "ProgramArguments": [*args, "run", "agent"],
                     "StartInterval": AGENT_INTERVAL_SECONDS, "RunAtLoad": False, "LowPriorityIO": True}
+        if name == "digest":
+            return {**common, "ProcessType": "Background", "ProgramArguments": [*args, "run", "digest"],
+                    "StartInterval": DIGEST_INTERVAL_SECONDS, "RunAtLoad": False}
         return {**common, "ProgramArguments": [*args, "run", name],
                 "RunAtLoad": bool(self.state.get("start_at_login", False)),
                 "KeepAlive": {"SuccessfulExit": False}, "ThrottleInterval": 5}
@@ -727,7 +731,7 @@ def cmd_run(args, paths: Paths) -> None:
         argv = [py, "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", str(BACKEND_PORT)]
     else:
         os.chdir(code / "backend")
-        argv = [py, "-m", f"app.{args.service}"]  # app.agent | app.desktop
+        argv = [py, "-m", f"app.{args.service}", *getattr(args, "extra", [])]  # app.agent | app.desktop | app.digest
     os.execve(py, argv, env)
 
 
@@ -744,7 +748,7 @@ def cmd_open(_args, paths: Paths) -> None:
     log_fd = os.open(paths.logs / "desktop.log", os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
     os.dup2(log_fd, 1)
     os.dup2(log_fd, 2)
-    cmd_run(argparse.Namespace(service="desktop"), paths)
+    cmd_run(argparse.Namespace(service="desktop", extra=[]), paths)
 
 
 def cmd_status(_args, paths: Paths) -> None:
@@ -878,7 +882,8 @@ def build_parser() -> argparse.ArgumentParser:
     i.set_defaults(func=cmd_install)
 
     r = sub.add_parser("run", help="(interno) ejecuta un servicio")
-    r.add_argument("service", choices=["backend", "agent", "desktop"])
+    r.add_argument("service", choices=["backend", "agent", "desktop", "digest"])
+    r.add_argument("extra", nargs=argparse.REMAINDER, help="argumentos para el servicio (p. ej. digest --force)")
     r.set_defaults(func=cmd_run)
 
     for name, func, help_ in [
@@ -897,7 +902,7 @@ def build_parser() -> argparse.ArgumentParser:
         sub.add_parser(name, help=help_).set_defaults(func=func)
 
     lg = sub.add_parser("logs", help="muestra los logs de un servicio")
-    lg.add_argument("service", nargs="?", default="backend", choices=["backend", "updater", "agent", "desktop"])
+    lg.add_argument("service", nargs="?", default="backend", choices=["backend", "updater", "agent", "desktop", "digest"])
     lg.add_argument("-n", "--lines", type=int, default=80)
     lg.set_defaults(func=cmd_logs)
 

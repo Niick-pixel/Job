@@ -182,6 +182,8 @@ class SearchPreferences(BaseModel):
     deep_match_top_n: int = 10
     prepare_threshold: int = 75
     max_triage_per_run: int = 150
+    digest_enabled: bool = True
+    digest_hour: int = Field(9, ge=0, le=23, description="Hora local del resumen diario")
     sources: SourcesConfig = Field(default_factory=SourcesConfig)
 
 

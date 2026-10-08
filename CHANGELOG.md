@@ -2,6 +2,18 @@
 
 Las notas de cada versión se muestran dentro de la app al ofrecer la actualización.
 
+## 0.5.0
+
+- **Descubrir empresas**: escribe nombres («Glovo, Cabify») o pega la URL de su página de empleo y la
+  app encuentra si publican en Greenhouse, Lever o Ashby, con nº de ofertas y ejemplos. Un clic y quedan
+  vigiladas por el agente.
+- **Guardar desde el navegador**: un botón en la barra de favoritos de Safari o Chrome envía a la app la
+  oferta que estés viendo (LinkedIn, InfoJobs, Indeed o cualquier web), con confirmación antes de guardar.
+  Instálalo en Ajustes → Navegador.
+- **Resumen diario**: aviso cada mañana (hora configurable en Agente) con entrevistas próximas,
+  candidaturas nuevas, aprobadas sin enviar y candidaturas sin respuesta desde hace más de 7 días.
+  También aparece como tarjeta «Hoy» en la Bandeja.
+
 ## 0.4.1
 
 - **Modo económico por defecto**: Claude Haiku en todo con el razonamiento mínimo (≈ 0,50 $ al mes con
