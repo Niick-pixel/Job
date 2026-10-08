@@ -1,5 +1,6 @@
 // 📬 Correos: respuestas de empresas clasificadas por la IA.
 import { api } from "../api.js";
+import { openApplication } from "../detail.js";
 import { button, empty, fmtDate, h, icon, pageHead, stagger, toast } from "../ui.js";
 
 const CATEGORY = {
@@ -53,7 +54,12 @@ function mailCard(e, highlight) {
     a.summary ? h("p", { style: { marginTop: "10px" } }, a.summary) : null,
     a.interview_datetime ? h("p", { class: "chip warn", style: { marginTop: "10px" } }, icon("calendar"), fmtDate(a.interview_datetime, true)) : null,
     a.action_required ? h("p", { class: "muted small", style: { marginTop: "10px" } }, icon("alert"), " ", a.action_required) : null,
-    h("p", { class: "faint small", style: { marginTop: "10px" } },
-      e.application_id ? "Vinculado a una candidatura del Kanban" : "Sin candidatura asociada",
-      ` · confianza ${Math.round((e.confidence || 0) * 100)}%`));
+    h("div", { class: "row between", style: { marginTop: "10px" } },
+      h("p", { class: "faint small" },
+        e.application_id ? "Vinculado a una candidatura del Kanban" : "Sin candidatura asociada",
+        ` · confianza ${Math.round((e.confidence || 0) * 100)}%`),
+      e.application_id ? button(e.category === "entrevista" ? "Preparar entrevista" : "Abrir ficha", {
+        kind: e.category === "entrevista" ? "primary" : "", size: "sm", ico: e.category === "entrevista" ? "sparkles" : "briefcase",
+        onClick: () => openApplication(e.application_id, { focus: e.category === "entrevista" ? "entrevista" : null }),
+      }) : null));
 }

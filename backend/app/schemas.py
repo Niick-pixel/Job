@@ -145,6 +145,35 @@ class ApplicationUpdate(BaseModel):
     status: ApplicationStatus | None = None
     notes: str | None = None
     interview_at: datetime | None = None
+    clear_interview: bool = False
+
+
+# ── Entrevistas y seguimiento (0.6.0) ──────────────────────────
+
+
+class PrepQuestion(BaseModel):
+    question: str
+    why: str = Field(description="Por qué es probable que la pregunten en esta entrevista")
+    answer_outline: str = Field(description="Esquema de respuesta (STAR) usando SOLO experiencia real del CV")
+
+
+class InterviewPrepOut(BaseModel):
+    company_summary: str = Field(description="Qué hace la empresa y el equipo, según la oferta y lo que sepas (avisa si puede estar desactualizado)")
+    role_focus: list[str] = Field(description="Lo que la entrevista va a evaluar, según la oferta")
+    likely_questions: list[PrepQuestion]
+    technical_topics: list[str] = Field(description="Temas técnicos concretos que conviene repasar")
+    questions_to_ask: list[str] = Field(description="Preguntas inteligentes para hacer al entrevistador")
+    weak_spots: list[str] = Field(description="Brechas del perfil frente a la oferta y cómo abordarlas con honestidad")
+    checklist: list[str] = Field(description="Logística y preparación práctica antes de la entrevista")
+
+
+class MessageDraft(BaseModel):
+    subject: str
+    body: str
+
+
+class MessageIn(BaseModel):
+    kind: Literal["seguimiento", "agradecimiento"]
 
 
 class EmailIn(BaseModel):

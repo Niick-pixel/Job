@@ -2,6 +2,20 @@
 
 Las notas de cada versión se muestran dentro de la app al ofrecer la actualización.
 
+## 0.6.0
+
+- **Ficha de cada candidatura**: haz clic en una tarjeta del Kanban (o en la tarjeta «Hoy» o en un correo)
+  para ver todo junto: estado, fecha de entrevista, preparación, seguimiento, notas y correos de la empresa.
+- **Entrevistas**: apunta la fecha y añádela a Calendario de macOS con un clic (con aviso 1 h antes).
+  Cuando llega un correo de entrevista recibes una notificación.
+- **Dossier de preparación**: la IA cruza la oferta con tu CV y te da preguntas probables con un esquema
+  de respuesta basado solo en tu experiencia real, temas técnicos a repasar, tus puntos débiles y cómo
+  abordarlos, qué preguntar tú y una lista para el día.
+- **Seguimiento**: si llevas 7 días sin respuesta, la app te propone un correo de seguimiento; tras la
+  entrevista, una nota de agradecimiento. Se redactan con tus datos, los revisas y se abren en Mail con un
+  clic. «Marcar como enviado» evita que te lo vuelva a recordar en una semana.
+- Corregido: las fechas de entrevista sin zona horaria que extraía la IA de un correo podían fallar al guardarse.
+
 ## 0.5.0
 
 - **Descubrir empresas**: escribe nombres («Glovo, Cabify») o pega la URL de su página de empleo y la

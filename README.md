@@ -27,6 +27,9 @@ Fuentes ──► duplicados ──► filtros duros ──► criba rápida ─
 - **Descubre empresas**: escribe nombres y encuentra sus portales de Greenhouse, Lever o Ashby (Agente → Dónde busca).
 - **Desde el navegador**: botón «Guardar en JobTracker» para la barra de favoritos (Ajustes → Navegador).
 - **Resumen diario**: notificación cada mañana y tarjeta «Hoy» en la Bandeja.
+- **Entrevistas y seguimiento**: ficha de cada candidatura con fecha de entrevista (a Calendario en un clic),
+  dossier de preparación con preguntas probables basadas en tu CV, y correos de seguimiento o agradecimiento
+  redactados por la IA que abres en Mail.
 - **Aprende**: los motivos con los que descartas candidaturas se tienen en cuenta en las siguientes cribas.
 - **Honesto**: el CV adaptado solo reordena y reformula lo que ya está en tu CV; las preguntas de filtro
   sin respuesta base quedan pendientes en vez de inventarse.
@@ -236,11 +239,16 @@ Correo ─Claude─► EmailClassification ─► mueve la tarjeta del Kanban + 
 | GET/PUT | `/api/answers` | Banco de respuestas a preguntas de filtro |
 | POST | `/api/agent/discover` | Busca los portales (Greenhouse/Lever/Ashby) de una lista de empresas |
 | GET | `/api/agent/digest` | Resumen «Hoy»: entrevistas, aprobadas sin enviar, seguimientos |
+| GET | `/api/applications/{id}/detail` | Ficha: oferta, correos, contacto, dossier y sugerencias de seguimiento |
+| GET · POST | `/api/applications/{id}/calendar.ics` · `/calendar` | Evento de la entrevista (.ics) · abrirlo en Calendario |
+| POST | `/api/applications/{id}/prep` | Genera el dossier de preparación de la entrevista |
+| POST | `/api/applications/{id}/message` | Redacta `seguimiento` o `agradecimiento` (asunto, cuerpo, destinatario) |
+| POST | `/api/applications/{id}/follow-up-sent` | Marca el seguimiento como enviado |
 | GET | `/capture` | Página de destino del botón del navegador (datos en el `#fragmento`) |
 
 ## Próximos pasos sugeridos
 
 1. **Fase 3**: agente que rellena formularios de Greenhouse/Lever/Ashby (Playwright) con captura antes de enviar.
-2. **Fase 4**: seguimientos automáticos (borradores en Gmail), eventos de calendario y dossier de entrevista.
+2. **Fase 4**: borradores de seguimiento directamente en Gmail y simulacro de entrevista por voz.
 3. Panel de embudo: tasa de respuesta por fuente y por versión de CV.
 4. Migraciones con Alembic si se pasa a PostgreSQL.

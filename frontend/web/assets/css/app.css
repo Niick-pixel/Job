@@ -387,3 +387,45 @@ details.disclosure > .body { padding: 0 0 14px; animation: enter var(--t) var(--
   .presets { grid-template-columns: 1fr; }
   .board { grid-template-columns: 1fr; }
 }
+
+/* ── Ficha de candidatura (diálogo) ─────────────────────────── */
+
+dialog.sheet {
+  width: min(720px, calc(100vw - 32px)); max-height: calc(100vh - 48px); margin: auto; padding: 0;
+  border: 1px solid var(--border); border-radius: calc(var(--radius) + 4px); background: var(--surface); color: var(--text);
+  box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.35), var(--shadow-md); overflow: hidden;
+  animation: sheet-in var(--t-slow) var(--ease-out) both;
+}
+dialog.sheet::backdrop { background: var(--overlay); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); animation: fade var(--t) var(--ease) both; }
+dialog.sheet.out { animation: sheet-out var(--t) var(--ease) both; }
+dialog.sheet.out::backdrop { animation: fade var(--t) var(--ease) reverse both; }
+.sheet-body { max-height: calc(100vh - 48px); overflow-y: auto; padding: 26px 28px 30px; display: grid; gap: 4px; }
+.sheet-head { display: flex; gap: 16px; align-items: flex-start; }
+.sheet-head h2 { font-size: 21px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.25; }
+.sheet-hint {
+  display: flex; gap: 10px; align-items: flex-start; margin-top: 18px; padding: 11px 14px; border-radius: var(--radius-sm);
+  background: var(--accent-soft); color: var(--accent); font-weight: 520;
+}
+.sheet-hint svg { width: 16px; height: 16px; flex: none; margin-top: 2px; }
+.sheet-section { padding-top: 6px; }
+.sheet-section > .section-title { text-align: left; margin: 24px 0 10px; display: flex; align-items: center; }
+.sheet-section > .section-title .btn { text-transform: none; letter-spacing: 0; }
+.sheet-section p svg { width: 15px; height: 15px; vertical-align: -2px; }
+.composer { display: grid; gap: 12px; margin-top: 12px; padding: 16px; animation: enter var(--t-slow) var(--ease-out) both; }
+.dossier { display: grid; gap: 14px; }
+.dossier-block h4 { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+.bullets { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.qa { display: grid; gap: 6px; }
+.qa details { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 9px 12px; background: var(--surface-2); transition: background var(--t) var(--ease); }
+.qa details[open] { background: var(--surface); }
+.qa summary { cursor: pointer; font-weight: 550; list-style: none; display: flex; gap: 8px; }
+.qa summary::-webkit-details-marker { display: none; }
+.qa summary::before { content: "›"; color: var(--text-3); transition: transform var(--t) var(--ease); display: inline-block; }
+.qa details[open] summary::before { transform: rotate(90deg); }
+.qa details p { margin-top: 6px; }
+.mail-line { display: flex; gap: 10px; align-items: flex-start; }
+.mail-line .dot { margin-top: 7px; }
+.ticket { cursor: pointer; }
+@keyframes sheet-in { from { opacity: 0; transform: translateY(14px) scale(0.985); } to { opacity: 1; transform: none; } }
+@keyframes sheet-out { to { opacity: 0; transform: translateY(10px) scale(0.985); } }
+@media (max-width: 760px) { .sheet-body { padding: 20px; } .sheet-head { flex-direction: column-reverse; } }

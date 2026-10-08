@@ -76,8 +76,18 @@ class Application(SQLModel, table=True):
     status: ApplicationStatus = ApplicationStatus.TO_APPLY
     notes: str | None = None
     applied_at: datetime | None = None
+    # Las fechas «sin zona» son hora local del usuario (lo que escribe o lo que dice el correo)
     interview_at: datetime | None = None
+    follow_up_at: datetime | None = None  # último seguimiento enviado
     updated_at: datetime = Field(default_factory=_now)
+
+
+class InterviewPrep(SQLModel, table=True):
+    """Dossier de preparación de una entrevista (generado por la IA)."""
+    id: int | None = Field(default=None, primary_key=True)
+    application_id: int = Field(foreign_key="application.id", unique=True)
+    content: dict = Field(default_factory=dict, sa_column=Column(JSON))
+    created_at: datetime = Field(default_factory=_now)
 
 
 class EmailEvent(SQLModel, table=True):

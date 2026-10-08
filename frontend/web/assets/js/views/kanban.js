@@ -1,5 +1,6 @@
 // 📋 Kanban: arrastra las candidaturas entre columnas.
 import { api } from "../api.js";
+import { openApplication } from "../detail.js";
 import { empty, fmtDate, h, icon, pageHead, stagger, toast, urgencyChip } from "../ui.js";
 
 const COLUMNS = [
@@ -19,13 +20,14 @@ export async function render(root, ctx) {
     return;
   }
   const grid = h("div", { class: "board" });
-  for (const col of COLUMNS) grid.append(column(col, board[col.id] || [], grid));
+  const reload = () => render(root, ctx);
+  for (const col of COLUMNS) grid.append(column(col, board[col.id] || [], grid, reload));
   root.replaceChildren(head, stagger(grid));
 }
 
-function column(col, items, grid) {
+function column(col, items, grid, reload) {
   const count = h("span", { class: "chip" }, String(items.length));
-  const body = h("div", {}, items.map(ticket));
+  const body = h("div", {}, items.map((a) => ticket(a, reload)));
   const el = h("section", { class: "column", "data-status": col.id },
     h("div", { class: "column-head" }, h("span", { class: `dot ${col.dot}` }), col.label, count), body);
 
@@ -58,14 +60,19 @@ function recount(grid) {
   grid.querySelectorAll(".column").forEach((c) => { c.querySelector(".column-head .chip").textContent = c.querySelectorAll(".ticket").length; });
 }
 
-function ticket(a) {
-  const t = h("div", { class: "ticket", draggable: "true", "data-app": a.id },
+function ticket(a, reload) {
+  const t = h("div", { class: "ticket", draggable: "true", "data-app": a.id, tabindex: "0", role: "button",
+    title: "Abrir la ficha · arrastra para cambiar de columna" },
     h("h4", {}, a.job_title),
     h("p", { class: "muted small" }, a.company || "—"),
     h("div", { class: "row", style: { marginTop: "8px", gap: "6px" } },
       a.match_score != null ? h("span", { class: "chip accent" }, `${Math.round(a.match_score)}%`) : null,
       urgencyChip(a.urgency_level),
-      a.interview_at ? h("span", { class: "chip warn" }, icon("calendar"), fmtDate(a.interview_at, true)) : null));
+      a.interview_at ? h("span", { class: "chip warn" }, icon("calendar"), fmtDate(a.interview_at, true)) : null,
+      a.notes ? h("span", { class: "chip", title: "Tiene notas" }, icon("file")) : null));
+  const open = () => openApplication(a.id, { onChange: reload });
+  t.addEventListener("click", open);
+  t.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } });
   t.addEventListener("dragstart", (e) => { e.dataTransfer.setData("text/plain", a.id); e.dataTransfer.effectAllowed = "move"; t.classList.add("dragging"); });
   t.addEventListener("dragend", () => t.classList.remove("dragging"));
   return t;

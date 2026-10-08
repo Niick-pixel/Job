@@ -1,11 +1,18 @@
+import subprocess
+import sys
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 from sqlmodel import Session, select
 
+from ..config import DATA_DIR
 from ..database import get_session
-from ..models import Application, ApplicationStatus, Job, MatchResult
-from ..schemas import ApplicationRead, ApplicationUpdate
+from ..models import Application, ApplicationStatus, CVProfile, EmailEvent, InterviewPrep, Job, MatchResult
+from ..schemas import ApplicationRead, ApplicationUpdate, CVExtraction, JobExtraction, MessageIn
+from ..services.interviews import build_ics, contact_from_senders, draft_message, prepare_interview
+from ..services.llm import LLMClient, LLMError, get_llm
+from ..timeutil import to_utc
 
 router = APIRouter(prefix="/api/applications", tags=["Kanban"])
 
@@ -61,8 +68,133 @@ def update_application(app_id: int, payload: ApplicationUpdate, db: Session = De
     if payload.notes is not None:
         app.notes = payload.notes
     if payload.interview_at is not None:
-        app.interview_at = payload.interview_at
+        app.interview_at = to_utc(payload.interview_at)
+    if payload.clear_interview:
+        app.interview_at = None
     db.add(app)
     db.commit()
     db.refresh(app)
     return to_read(db, app)
+
+
+
+# ── Ficha, calendario, preparación y seguimiento (0.6.0) ───────
+
+
+def _get(db: Session, app_id: int) -> tuple[Application, Job]:
+    app = db.get(Application, app_id)
+    if not app:
+        raise HTTPException(404, "Candidatura no encontrada")
+    return app, db.get(Job, app.job_id)
+
+
+def _cv(db: Session) -> CVExtraction:
+    cv = db.exec(select(CVProfile).order_by(CVProfile.created_at.desc())).first()
+    if not cv:
+        raise HTTPException(409, "Sube primero tu CV")
+    return CVExtraction.model_validate(cv.profile)
+
+
+def _emails(db: Session, app_id: int) -> list[EmailEvent]:
+    return db.exec(select(EmailEvent).where(EmailEvent.application_id == app_id)
+                   .order_by(EmailEvent.received_at.desc())).all()
+
+
+def _as_utc(dt: datetime | None) -> datetime | None:
+    if dt is None:
+        return None
+    return dt.astimezone(timezone.utc) if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
+@router.get("/{app_id}/detail")
+def detail(app_id: int, db: Session = Depends(get_session)):
+    app, job = _get(db, app_id)
+    emails = _emails(db, app_id)
+    prep = db.exec(select(InterviewPrep).where(InterviewPrep.application_id == app_id)).first()
+    now = datetime.now(timezone.utc)
+    applied = _as_utc(app.applied_at)
+    interview = _as_utc(app.interview_at)
+    return {
+        **to_read(db, app).model_dump(mode="json"),
+        "follow_up_at": app.follow_up_at,
+        "job": {"id": job.id, "title": job.title, "company": job.company, "location": job.location,
+                "url": job.source_url or job.apply_url, "urgency": job.urgency,
+                "salary": (job.details or {}).get("salary_range")},
+        "emails": [{"subject": e.subject, "sender": e.sender, "category": e.category, "received_at": e.received_at,
+                    "summary": (e.analysis or {}).get("summary")} for e in emails],
+        "contact": contact_from_senders([e.sender for e in emails]),
+        "prep": prep.content if prep else None,
+        "days_since_applied": (now - applied).days if applied else None,
+        "suggest_follow_up": bool(app.status == ApplicationStatus.APPLIED and applied and (now - applied).days >= 7
+                                  and not [e for e in emails if e.category != "confirmacion_recepcion"]),
+        "suggest_thanks": bool(app.status == ApplicationStatus.INTERVIEW and interview and interview < now),
+    }
+
+
+@router.get("/{app_id}/calendar.ics")
+def calendar_file(app_id: int, db: Session = Depends(get_session)):
+    app, job = _get(db, app_id)
+    if not app.interview_at:
+        raise HTTPException(409, "Primero indica la fecha de la entrevista")
+    ics = build_ics(
+        uid=f"jobtracker-app-{app.id}@jobtracker.local", start=to_utc(app.interview_at),
+        summary=f"Entrevista · {job.company or ''} — {job.title}".replace(" ·  —", " ·"),
+        description="Preparada con JobTracker AI." + (f"\n\nNotas: {app.notes}" if app.notes else ""),
+        url=job.source_url,
+    )
+    return Response(ics, media_type="text/calendar; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="entrevista-{app.id}.ics"'})
+
+
+@router.post("/{app_id}/calendar")
+def add_to_calendar(app_id: int, db: Session = Depends(get_session)):
+    """En macOS abre el evento en Calendario (que pide confirmación); en otros sistemas, descarga."""
+    ics = calendar_file(app_id, db).body
+    if sys.platform == "darwin":
+        folder = DATA_DIR / "calendar"
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / f"entrevista-{app_id}.ics"
+        path.write_bytes(ics)
+        subprocess.run(["open", str(path)], check=False)
+        return {"opened": True}
+    return {"opened": False, "url": f"/api/applications/{app_id}/calendar.ics"}
+
+
+@router.post("/{app_id}/prep")
+def generate_prep(app_id: int, db: Session = Depends(get_session), llm: LLMClient = Depends(get_llm)):
+    app, job = _get(db, app_id)
+    details = JobExtraction.model_validate(job.details) if job.details else None
+    try:
+        out = prepare_interview(llm, _cv(db), details, job.raw_text)
+    except LLMError as e:
+        raise HTTPException(502, str(e)) from e
+    prep = db.exec(select(InterviewPrep).where(InterviewPrep.application_id == app_id)).first() \
+        or InterviewPrep(application_id=app_id)
+    prep.content = out.model_dump()
+    prep.created_at = datetime.now(timezone.utc)
+    db.add(prep)
+    db.commit()
+    return prep.content
+
+
+@router.post("/{app_id}/message")
+def message(app_id: int, payload: MessageIn, db: Session = Depends(get_session), llm: LLMClient = Depends(get_llm)):
+    app, job = _get(db, app_id)
+    applied = _as_utc(app.applied_at)
+    days = (datetime.now(timezone.utc) - applied).days if applied else None
+    local = to_utc(app.interview_at).astimezone() if app.interview_at else None
+    when = local.strftime("%d/%m %H:%M") if local else None
+    try:
+        draft = draft_message(llm, payload.kind, _cv(db), job.title, job.company, days=days, when=when, notes=app.notes)
+    except LLMError as e:
+        raise HTTPException(502, str(e)) from e
+    return {**draft.model_dump(), "to": contact_from_senders([e.sender for e in _emails(db, app_id)])}
+
+
+@router.post("/{app_id}/follow-up-sent")
+def follow_up_sent(app_id: int, db: Session = Depends(get_session)):
+    app, _ = _get(db, app_id)
+    app.follow_up_at = datetime.now(timezone.utc)
+    db.add(app)
+    db.commit()
+    return {"follow_up_at": app.follow_up_at}

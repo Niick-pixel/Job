@@ -10,7 +10,9 @@ from ..schemas import EmailClassification, EmailIn
 from ..services.email_classifier import CATEGORY_TO_STATUS, classify_email
 from ..services.email_sources import fetch_emails
 from ..services.llm import LLMClient, LLMError, get_llm
+from ..services.notify import notify
 from ..services.sources import is_job_alert
+from ..timeutil import to_utc
 from .applications import apply_status
 
 router = APIRouter(prefix="/api/emails", tags=["Correos"])
@@ -42,8 +44,11 @@ def process_email(db: Session, llm: LLMClient, email: EmailIn) -> EmailEvent:
     if app and target and cls.confidence >= 0.6:
         apply_status(app, target)
         if cls.interview_datetime:
-            app.interview_at = cls.interview_datetime
+            app.interview_at = to_utc(cls.interview_datetime)
         db.add(app)
+    if cls.category == "entrevista" and cls.confidence >= 0.6:
+        when = cls.interview_datetime.strftime(" · %d/%m %H:%M") if cls.interview_datetime else ""
+        notify("🎤 Entrevista detectada", f"{cls.company or email.sender}{when} · prepárala desde la app")
 
     event = EmailEvent(
         message_id=email.message_id,

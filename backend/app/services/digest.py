@@ -35,7 +35,10 @@ def build_digest(db: Session, now: datetime | None = None) -> dict:
         if app.status == ApplicationStatus.INTERVIEW and at and now - timedelta(hours=2) <= at <= now + timedelta(hours=48):
             interviews.append({"application_id": app.id, "title": job.title, "company": job.company, "at": at.isoformat()})
         applied = _aware(app.applied_at)
-        if app.status == ApplicationStatus.APPLIED and applied and applied <= now - timedelta(days=STALE_DAYS):
+        followed = _aware(app.follow_up_at)
+        recently_followed = followed and followed > now - timedelta(days=STALE_DAYS)
+        if app.status == ApplicationStatus.APPLIED and applied and applied <= now - timedelta(days=STALE_DAYS) \
+                and not recently_followed:
             replied = db.exec(select(EmailEvent.id).where(EmailEvent.application_id == app.id,
                                                           EmailEvent.category != "confirmacion_recepcion")).first()
             if not replied:
