@@ -105,3 +105,61 @@ def mask(value: str | None) -> str | None:
     if len(value) <= 8:
         return "•" * len(value)
     return f"{value[:6]}…{value[-4:]}"
+
+
+# ── Llavero de macOS ───────────────────────────────────────────
+
+
+def keychain_names(values: dict[str, str] | None = None) -> list[str]:
+    from .. import keychain
+
+    return keychain.index_from(values if values is not None else read_env())
+
+
+def _set_index(names: list[str]) -> dict[str, str | None]:
+    return {"KEYCHAIN_KEYS": ",".join(sorted(set(names))) or None}
+
+
+def store_secret(name: str, value: str) -> str:
+    """Guarda una clave: en el Llavero si se puede (y la quita del .env); si no, en el .env.
+    Devuelve dónde quedó: «llavero» o «env»."""
+    from .. import keychain
+
+    if keychain.available() and keychain.backend.set(name, value):
+        write_env({name: None, **_set_index(keychain_names() + [name])})
+        os.environ[name] = value
+        reload_runtime()
+        return "llavero"
+    write_env({name: value})
+    return "env"
+
+
+def delete_secret(name: str) -> None:
+    from .. import keychain
+
+    names = keychain_names()
+    if name in names:
+        if keychain.available():
+            keychain.backend.delete(name)
+        write_env({name: None, **_set_index([n for n in names if n != name])})
+    else:
+        write_env({name: None})
+
+
+def migrate_to_keychain(secret_names: set[str]) -> list[str]:
+    """Pasa al Llavero las claves que aún estén en texto plano en el .env (al arrancar la app)."""
+    from .. import keychain
+
+    if not keychain.available():
+        return []
+    env = read_env()
+    moved = []
+    for name, value in env.items():
+        if name in secret_names and value and keychain.backend.set(name, value):
+            moved.append(name)
+    if moved:
+        write_env({**{n: None for n in moved}, **_set_index(keychain_names(env) + moved)})
+        for n in moved:  # write_env(None) las quitó del entorno del proceso: se reponen
+            os.environ[n] = env[n]
+        reload_runtime()
+    return moved

@@ -243,18 +243,22 @@ def _annual(amount, interval: str | None) -> float | None:
 
 ALERT_SENDERS = re.compile(
     r"jobalerts?-noreply@linkedin|jobs-noreply@linkedin|@infojobs\.net|alert@indeed|@indeed\.com"
-    r"|@glassdoor|@tecnoempleo|@welcometothejungle|@getmanfred|noreply@jobs",
+    r"|@glassdoor|@tecnoempleo|@welcometothejungle|@getmanfred|noreply@jobs"
+    # Latinoamérica: Computrabajo, elempleo, Empleos.net (CR), Bumeran/ZonaJobs, OCC, Get on Board, Torre…
+    r"|@computrabajo|@elempleo|@empleos\.net|@bumeran|@zonajobs|@occ\.com\.mx|@occmundial|@getonbrd|@torre\.(?:co|ai)"
+    r"|@tecoloco|@buscojobs|@laborum|@trabajando\.com|@multitrabajos|@konzerta",
     re.I,
 )
 
-ALERT_SYSTEM = """Extraes ofertas de empleo de correos de alertas (LinkedIn, InfoJobs, Indeed…).
+ALERT_SYSTEM = """Extraes ofertas de empleo de correos de alertas (LinkedIn, Computrabajo, InfoJobs, Indeed, elempleo…).
 Devuelve cada oferta que aparezca, sin inventar datos: si falta la empresa o la ubicación, null.
 Copia la URL de cada oferta tal cual aparece en el correo."""
 
 
 def is_job_alert(email: EmailIn) -> bool:
     return bool(ALERT_SENDERS.search(email.sender)) or bool(
-        re.search(r"alerta de empleo|job alert|nuevas ofertas|new jobs? for you|empleos? que coinciden", email.subject, re.I)
+        re.search(r"alerta de empleo|job alert|nuevas ofertas|new jobs? for you|empleos? que coinciden|ofertas? de empleo para ti"
+                  r"|vacantes? (nuevas?|para ti|que te pueden)", email.subject, re.I)
     )
 
 
@@ -284,13 +288,24 @@ def extract_alert_jobs(llm: LLMClient, email: EmailIn, fast_model: str) -> list[
 # ── Orquestación ────────────────────────────────────────────────
 
 
-def collect(client: httpx.Client, cfg: SourcesConfig, adzuna_creds: tuple[str, str] | None) -> tuple[list[RawJob], dict]:
+def collect(client: httpx.Client, cfg: SourcesConfig, adzuna_creds: tuple[str, str] | None,
+            country: str | None = None) -> tuple[list[RawJob], dict]:
     """Ejecuta todas las fuentes HTTP configuradas. Devuelve (ofertas, informe por fuente)."""
+    from . import sources_latam as lt
+
     tasks = (
         [(f"greenhouse:{b}", fetch_greenhouse, (b,)) for b in cfg.greenhouse]
         + [(f"lever:{c}", fetch_lever, (c,)) for c in cfg.lever]
         + [(f"ashby:{o}", fetch_ashby, (o,)) for o in cfg.ashby]
         + [(f"remotive:{q}", fetch_remotive, (q,)) for q in cfg.remotive_queries]
+        + [(f"workday:{(lt.parse_workday(u) or (u,))[0]}", lt.fetch_workday, (u, country)) for u in cfg.workday]
+        + [(f"smartrecruiters:{c}", lt.fetch_smartrecruiters, (c, country)) for c in cfg.smartrecruiters]
+        + [(f"recruitee:{c}", lt.fetch_recruitee, (c, country)) for c in cfg.recruitee]
+        + [(f"breezy:{c}", lt.fetch_breezy, (c, country)) for c in cfg.breezy]
+        + [(f"workable:{c}", lt.fetch_workable, (c, country)) for c in cfg.workable]
+        + [(f"getonbrd:{q}", lt.fetch_getonbrd, (q, country)) for q in cfg.getonbrd_queries]
+        + ([("himalayas", lt.fetch_himalayas, (country,))] if cfg.himalayas else [])
+        + ([("amazon", lt.fetch_amazon, (country,))] if cfg.amazon else [])
     )
     if cfg.adzuna_queries and adzuna_creds:
         tasks += [(f"adzuna:{q}", fetch_adzuna, (q, cfg.adzuna_country, *adzuna_creds)) for q in cfg.adzuna_queries]
@@ -307,3 +322,19 @@ def collect(client: httpx.Client, cfg: SourcesConfig, adzuna_creds: tuple[str, s
         except SourceError as e:
             report[name] = f"error: {e}"
     return jobs, report
+
+
+def page_text(client: httpx.Client, url: str, limit: int = 15_000) -> str:
+    """Texto de la página pública de una oferta (para fuentes que no publican la descripción)."""
+    try:
+        r = client.get(url, headers={"User-Agent": USER_AGENT}, timeout=15)
+        r.raise_for_status()
+    except httpx.HTTPError:
+        return ""
+    if "html" not in r.headers.get("content-type", "html"):
+        return ""
+    soup = BeautifulSoup(r.text, "html.parser")
+    for tag in soup(["script", "style", "nav", "header", "footer", "noscript", "svg", "form"]):
+        tag.decompose()
+    main = soup.find("main") or soup.find("article") or soup.body or soup
+    return html_to_text(str(main))[:limit]

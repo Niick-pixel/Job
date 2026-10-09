@@ -15,8 +15,10 @@ from ..models import Application, ApplicationStatus, CVProfile, EmailEvent, Inte
 from ..schemas import (ApplicationRead, ApplicationUpdate, CVExtraction, GmailDraftIn, JobExtraction, MessageIn, MockIn,
                        MockTurn, NegotiateIn, OfferDetails)
 from ..services import email_sources
+from ..services.agent import load_preferences
 from ..services.interviews import (build_ics, compare_offers, contact_from_senders, draft_message, mock_step, negotiate,
-                                   prepare_interview)
+                                   offer_annual, prepare_interview)
+from ..services.region import country_info, market_context
 from ..services.llm import LLMClient, LLMError, get_llm
 from ..timeutil import to_utc
 
@@ -132,6 +134,14 @@ def _emails(db: Session, app_id: int) -> list[EmailEvent]:
                    .order_by(EmailEvent.received_at.desc())).all()
 
 
+def _offer_defaults(country: str | None) -> dict:
+    """Moneda y forma de pago habituales del país (Costa Rica: mensual, aguinaldo, colones o dólares)."""
+    info = country_info(country)
+    if not info:
+        return {"currency": "EUR", "period": "anual", "thirteenth": False, "country": None}
+    return {"currency": info["currency"], "period": info["period"], "thirteenth": info["thirteenth"], "country": country}
+
+
 def _as_utc(dt: datetime | None) -> datetime | None:
     if dt is None:
         return None
@@ -157,6 +167,8 @@ def detail(app_id: int, db: Session = Depends(get_session)):
         "contact": contact_from_senders([e.sender for e in emails]),
         "prep": prep.content if prep else None,
         "offer": app.offer or None,
+        "offer_total": offer_annual(app.offer) if app.offer else None,
+        "offer_defaults": _offer_defaults(load_preferences(db).country),
         "other_offers": len([a for a in db.exec(select(Application).where(Application.status == ApplicationStatus.OFFER)).all()
                              if a.id != app.id and a.offer]),
         "gmail": get_settings().email_mode == "gmail" and get_settings().gmail_token_file.exists(),
@@ -223,7 +235,8 @@ def message(app_id: int, payload: MessageIn, db: Session = Depends(get_session),
     local = to_utc(app.interview_at).astimezone() if app.interview_at else None
     when = local.strftime("%d/%m %H:%M") if local else None
     try:
-        draft = draft_message(llm, payload.kind, _cv(db), job.title, job.company, days=days, when=when, notes=app.notes)
+        draft = draft_message(llm, payload.kind, _cv(db), job.title, job.company, days=days, when=when, notes=app.notes,
+                              market=market_context(load_preferences(db).country))
     except LLMError as e:
         raise HTTPException(502, str(e)) from e
     return {**draft.model_dump(), "to": contact_from_senders([e.sender for e in _emails(db, app_id)])}
@@ -294,7 +307,8 @@ def negotiation(app_id: int, payload: NegotiateIn, db: Session = Depends(get_ses
     if not app.offer:
         raise HTTPException(409, "Apunta primero las condiciones de la oferta")
     try:
-        out = negotiate(llm, _cv(db), job.title, job.company, job.raw_text, app.offer, payload.target, payload.priorities)
+        out = negotiate(llm, _cv(db), job.title, job.company, job.raw_text, app.offer, payload.target, payload.priorities,
+                        market=market_context(load_preferences(db).country))
     except LLMError as e:
         raise HTTPException(502, str(e)) from e
     return {**out.model_dump(), "to": contact_from_senders([e.sender for e in _emails(db, app_id)])}
@@ -317,9 +331,9 @@ def compare(payload: CompareIn, db: Session = Depends(get_session), llm: LLMClie
         job = db.get(Job, a.job_id)
         o = OfferDetails.model_validate(a.offer)
         offers.append({"application_id": a.id, "title": job.title, "company": job.company, "offer": a.offer,
-                       "total": (o.base_salary or 0) + (o.variable or 0) or None, "currency": o.currency})
+                       "total": offer_annual(a.offer), "currency": o.currency})
     try:
-        result = compare_offers(llm, _cv(db), offers, payload.priorities)
+        result = compare_offers(llm, _cv(db), offers, payload.priorities, market=market_context(load_preferences(db).country))
     except LLMError as e:
         raise HTTPException(502, str(e)) from e
     by_id = {x.application_id: x for x in result.offers}

@@ -72,7 +72,8 @@ function buildNav() {
   actions.append(
     update,
     button("", { kind: "ghost", ico: "palette", title: "Tema", onClick: (e) => themeMenu(e.currentTarget) }),
-    h("button", { class: "btn ghost icon", "data-route": "ajustes", title: "Ajustes (⌘,)", onClick: () => ctx.go("ajustes") }, icon("settings")),
+    h("button", { class: "btn ghost icon", "data-route": "ajustes", id: "settings-btn", title: "Ajustes (⌘,)", style: { position: "relative" },
+      onClick: () => ctx.go("ajustes") }, icon("settings")),
   );
   addEventListener("scroll", () => $(".topbar").classList.toggle("scrolled", scrollY > 4), { passive: true });
   addEventListener("resize", () => moveThumb(current));
@@ -137,6 +138,18 @@ async function checkUpdate() {
 // ── Arranque ─────────────────────────────────────────────────────
 buildNav();
 addEventListener("hashchange", route);
-await Promise.all([ctx.refreshCv(), ctx.refreshCounts(), checkUpdate()]);
+/** Punto rojo en Ajustes si el diagnóstico encuentra algo roto (clave, CV, agente…). */
+async function checkHealth() {
+  const d = await api.get("/api/status/diagnostics").catch(() => null);
+  const btn = document.getElementById("settings-btn");
+  btn?.querySelector(".nav-alert")?.remove();
+  if (d?.summary.error) {
+    btn?.append(h("span", { class: "nav-alert" }));
+    btn.title = `Ajustes (⌘,) · ${d.summary.error} problema${d.summary.error > 1 ? "s" : ""} en Estado`;
+  }
+}
+
+await Promise.all([ctx.refreshCv(), ctx.refreshCounts(), checkUpdate(), checkHealth()]);
+setInterval(checkHealth, 10 * 60 * 1000);
 route();
 setInterval(() => ctx.refreshCounts(), 60_000);

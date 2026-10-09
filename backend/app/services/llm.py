@@ -71,6 +71,9 @@ class AnthropicLLM:
         except anthropic.APIConnectionError as e:
             raise LLMError("No se pudo conectar con la API de Claude") from e
 
+        from .usage import record  # cada llamada cuenta para el medidor de gasto (también las rechazadas)
+        record(getattr(response, "model", None) or model, schema.__name__, getattr(response, "usage", None))
+
         if response.stop_reason == "refusal":
             raise LLMError("El modelo rechazó la petición")
         if response.stop_reason == "max_tokens":

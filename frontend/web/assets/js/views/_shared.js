@@ -48,7 +48,8 @@ export async function setupBanner(ctx) {
 
 export const sourceLabel = (s) => ({
   greenhouse: "Greenhouse", lever: "Lever", ashby: "Ashby", remotive: "Remotive", adzuna: "Adzuna",
-  email: "Alerta por correo", manual: "Añadida por ti",
+  email: "Alerta por correo", manual: "Añadida por ti", workday: "Workday", smartrecruiters: "SmartRecruiters",
+  getonbrd: "Get on Board", himalayas: "Himalayas", amazon: "Amazon", recruitee: "Recruitee", breezy: "Breezy", workable: "Workable",
 }[s] || s);
 
 export function linkButton(label, href, ico = "external") {

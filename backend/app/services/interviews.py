@@ -111,9 +111,11 @@ def prepare_interview(llm: LLMClient, cv: CVExtraction, job: JobExtraction | Non
 
 
 def draft_message(llm: LLMClient, kind: str, cv: CVExtraction, job_title: str, company: str | None,
-                  days: int | None = None, when: str | None = None, notes: str | None = None) -> MessageDraft:
+                  days: int | None = None, when: str | None = None, notes: str | None = None,
+                  market: str = "") -> MessageDraft:
     instruction = MESSAGE_KIND[kind].format(days=days or "varios", when=when or "reciente")
-    context = f"Puesto: {job_title}\nEmpresa: {company or '—'}\n" + (f"Notas del candidato: {notes}\n" if notes else "")
+    context = f"Puesto: {job_title}\nEmpresa: {company or '—'}\n" + (f"Notas del candidato: {notes}\n" if notes else "") \
+        + (f"Costumbres del país: {market}\n" if market else "")
     return llm.structured(
         system=MESSAGE_SYSTEM,
         prompt=f"{instruction}\n\n<contexto>\n{context}</contexto>\n\n<cv_resumen>\n{cv.full_name or ''}\n{cv.summary}\n</cv_resumen>",
@@ -181,10 +183,21 @@ Considera dinero total (fijo + variable), modalidad, crecimiento, encaje con su 
 estabilidad y lo que falte por aclarar. No inventes datos que no estén en las ofertas; si falta algo, dilo."""
 
 
+def offer_annual(offer: dict) -> float | None:
+    """Total bruto anual: fijo (×12 si es mensual, +1 mes de aguinaldo si lo hay) + variable."""
+    o = OfferDetails.model_validate(offer or {})
+    base = o.base_salary or 0
+    if o.period == "mensual":
+        base = base * (13 if o.thirteenth else 12)
+    total = base + (o.variable or 0)
+    return total or None
+
+
 def offer_text(offer: dict) -> str:
     o = OfferDetails.model_validate(offer or {})
-    total = (o.base_salary or 0) + (o.variable or 0)
-    lines = [f"Fijo: {o.base_salary:,.0f} {o.currency}" if o.base_salary else None,
+    total = offer_annual(offer) or 0
+    lines = [f"Fijo: {o.base_salary:,.0f} {o.currency} brutos {'al mes' if o.period == 'mensual' else 'al año'}"
+             + (" + aguinaldo (un salario extra al año)" if o.thirteenth else "") if o.base_salary else None,
              f"Variable: {o.variable:,.0f} {o.currency}" if o.variable else None,
              f"Total anual estimado: {total:,.0f} {o.currency}" if total else None,
              f"Equity: {o.equity}" if o.equity else None, f"Modalidad: {o.modality}" if o.modality else None,
@@ -196,8 +209,8 @@ def offer_text(offer: dict) -> str:
 
 
 def negotiate(llm: LLMClient, cv: CVExtraction, job_title: str, company: str | None, job_text: str, offer: dict,
-              target: str | None, priorities: list[str]) -> NegotiationOut:
-    prompt = (f"<puesto>{job_title} en {company or 'la empresa'}</puesto>\n<oferta_publicada>\n{job_text[:5000]}\n</oferta_publicada>\n"
+              target: str | None, priorities: list[str], market: str = "") -> NegotiationOut:
+    prompt = ((f"<mercado>\n{market}\n</mercado>\n" if market else "") +f"<puesto>{job_title} en {company or 'la empresa'}</puesto>\n<oferta_publicada>\n{job_text[:5000]}\n</oferta_publicada>\n"
               f"<condiciones_ofrecidas>\n{offer_text(offer)}\n</condiciones_ofrecidas>\n"
               f"<cv>\n{cv.model_dump_json(include={'full_name', 'headline', 'years_experience', 'seniority', 'summary', 'experience', 'hard_skills', 'location'})}\n</cv>\n"
               + (f"<objetivo_del_candidato>{target}</objetivo_del_candidato>\n" if target else "")
@@ -206,10 +219,11 @@ def negotiate(llm: LLMClient, cv: CVExtraction, job_title: str, company: str | N
     return llm.structured(system=NEGOTIATION_SYSTEM, prompt=prompt, schema=NegotiationOut, max_tokens=8000)
 
 
-def compare_offers(llm: LLMClient, cv: CVExtraction, offers: list[dict], priorities: list[str]) -> OfferComparison:
+def compare_offers(llm: LLMClient, cv: CVExtraction, offers: list[dict], priorities: list[str],
+                   market: str = "") -> OfferComparison:
     blocks = "\n\n".join(f"<oferta application_id=\"{o['application_id']}\">\n{o['title']} en {o['company'] or '—'}\n"
                           f"{offer_text(o['offer'])}\n</oferta>" for o in offers)
-    prompt = (f"{blocks}\n\n<perfil>{cv.headline or ''} · {cv.summary}</perfil>\n"
+    prompt = ((f"<mercado>\n{market}\n</mercado>\n" if market else "") + f"{blocks}\n\n<perfil>{cv.headline or ''} · {cv.summary}</perfil>\n"
               + (f"<prioridades>{', '.join(priorities)}</prioridades>\n" if priorities else "")
               + "\nCompara las ofertas (una entrada por oferta, con su application_id) y recomienda.")
     return llm.structured(system=COMPARE_SYSTEM, prompt=prompt, schema=OfferComparison, max_tokens=6000)

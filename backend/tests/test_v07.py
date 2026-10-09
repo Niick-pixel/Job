@@ -98,7 +98,7 @@ def test_digest_main_sends_reminder_once(tmp_path, monkeypatch, db):
     monkeypatch.setattr(d, "notify", lambda title, msg: sent.append(title))
     _interview(db, "Orbit", datetime.now(timezone.utc) + timedelta(hours=1))
     assert d.send_reminders(db) == 1 and d.send_reminders(db) == 0
-    assert len(sent) == 1 and sent[0].startswith("🎤 Hoy")
+    assert len(sent) == 1 and sent[0].startswith(("🎤 Hoy", "🎤 Mañana"))  # cerca de medianoche es «mañana»
 
 
 # ── Exportar ────────────────────────────────────────────────────
@@ -233,7 +233,8 @@ def test_offer_negotiation_and_comparison(client, fake_llm, with_cv):
     a = _new_app(client, "Platform Engineer en Orbit ")
     assert client.post(f"/api/applications/{a}/negotiate", json={}).status_code == 409  # sin condiciones
     saved = client.put(f"/api/applications/{a}/offer", json={"base_salary": 48000, "variable": 4000, "modality": "híbrido"}).json()
-    assert saved == {"base_salary": 48000, "variable": 4000, "modality": "híbrido", "currency": "EUR"}
+    assert saved == {"base_salary": 48000, "variable": 4000, "modality": "híbrido", "currency": "EUR", "period": "anual",
+                     "thirteenth": False}
     d = client.get(f"/api/applications/{a}/detail").json()
     assert d["status"] == "oferta" and d["offer"]["base_salary"] == 48000 and d["other_offers"] == 0
 

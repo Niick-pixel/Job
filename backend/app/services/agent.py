@@ -26,8 +26,10 @@ from .job_ingest import analyze_job
 from .llm import LLMClient, LLMError
 from .matcher import evaluate_match
 from .notify import notify
+from .region import LATAM, country_info, guess_country, remote_restriction
 from .stats import source_weights
-from .sources import RawJob, collect, extract_alert_jobs, is_job_alert
+from .usage import budget_notice, over_budget
+from .sources import RawJob, collect, extract_alert_jobs, is_job_alert, page_text
 from .urgency import assess_urgency
 
 TRIAGE_BATCH = 8
@@ -50,6 +52,8 @@ def preferences_configured(db: Session) -> bool:
     return db.get(SearchPreferencesRow, 1) is not None
 
 
+ADZUNA_COUNTRIES = {"at", "au", "be", "br", "ca", "ch", "de", "es", "fr", "gb", "in", "it", "mx", "nl", "nz", "pl", "sg", "us", "za"}
+
 AUTOCONFIG_SYSTEM = """Propones la configuración inicial de un buscador de empleo a partir del CV del candidato.
 Sé conservador: estas reglas descartan ofertas sin pasar por la IA, así que no restrinjas de más.
 No propongas títulos de puesto: la criba con IA ya juzga el encaje con el CV completo."""
@@ -69,6 +73,25 @@ def autoconfigure_preferences(llm: LLMClient, settings: Settings, cv: CVExtracti
     prefs.sources.remotive_queries = proposal.remotive_queries[:3]
     prefs.sources.adzuna_queries = proposal.adzuna_queries[:3]
     prefs.sources.adzuna_country = (proposal.adzuna_country or "es").lower()[:2]
+    prefs = apply_region(prefs, (proposal.country or guess_country(cv.location) or "").upper() or None,
+                         proposal.getonbrd_queries)
+    if prefs.sources.adzuna_country not in ADZUNA_COUNTRIES:
+        prefs.sources.adzuna_queries = []  # Adzuna no cubre ese país (sí México y Brasil)
+    return prefs
+
+
+def apply_region(prefs: SearchPreferences, country: str | None, getonbrd: list[str] | None = None) -> SearchPreferences:
+    """Fija el país y, en Latinoamérica, activa el portal tecnológico regional y los remotos abiertos a la región."""
+    prefs = prefs.model_copy(deep=True)
+    prefs.region_checked = True
+    if not country_info(country):
+        return prefs
+    prefs.country = country
+    if country in LATAM:
+        if not prefs.sources.getonbrd_queries:
+            prefs.sources.getonbrd_queries = (getonbrd if getonbrd is not None else prefs.sources.remotive_queries)[:3]
+        prefs.sources.himalayas = True
+        prefs.sources.amazon = prefs.sources.amazon or country == "CR"
     return prefs
 
 
@@ -122,6 +145,8 @@ def hard_filter(job: RawJob, prefs: SearchPreferences, today: date | None = None
         return f"contiene «{hit}»"
     if prefs.remote_only and job.remote is not True:
         return "no es remota"
+    if job.remote and prefs.country and (only := remote_restriction(job.location, job.description, prefs.country)):
+        return f"remota, pero solo para otra región («{only}»)"
     if job.remote is not True or not prefs.remote_ok:
         if prefs.locations and job.location and not _contains_any(job.location, prefs.locations):
             if not (job.remote and prefs.remote_ok):
@@ -209,6 +234,12 @@ def run_agent(
         if not prefs.enabled:
             run.status, run.error = "ok", "agente desactivado en preferencias"
             return run
+        notice = budget_notice(db, prefs.monthly_budget_usd)
+        if notice:
+            notify("JobTracker AI · gasto en IA", notice)
+        if over_budget(db, prefs.monthly_budget_usd):
+            run.status, run.error = "ok", "pausado: alcanzado el tope de gasto en IA de este mes"
+            return run
         cv_row = db.exec(select(CVProfile).order_by(CVProfile.created_at.desc())).first()
         if not cv_row:
             raise LLMError("Sube tu CV para que el agente sepa qué buscar")
@@ -216,6 +247,10 @@ def run_agent(
         if not preferences_configured(db):  # primera vez: se configura solo a partir del CV
             prefs = save_preferences(db, autoconfigure_preferences(llm, settings, cv))
             stats["autoconfigurado"] = True
+        elif not prefs.region_checked:  # actualizado desde < 0.8: deduce el país del CV una vez
+            prefs = save_preferences(db, apply_region(prefs, guess_country(cv.location, *prefs.locations)))
+            if prefs.country:
+                stats["region"] = prefs.country
 
         # 1. Fuentes
         raws: list[RawJob] = []
@@ -223,7 +258,7 @@ def run_agent(
         client = http_client or httpx.Client(timeout=20, follow_redirects=True)
         try:
             creds = (settings.adzuna_app_id, settings.adzuna_app_key) if settings.adzuna_app_id and settings.adzuna_app_key else None
-            found, report = collect(client, prefs.sources, creds)
+            found, report = collect(client, prefs.sources, creds, country=prefs.country)
             raws.extend(found)
             stats["fuentes"].update(report)
         finally:
@@ -265,8 +300,13 @@ def run_agent(
                         * weights.get(j.source, 1.0), reverse=True)
         if weights:
             stats["pesos_fuentes"] = weights
-        for job in candidates[: prefs.deep_match_top_n]:
-            _deep_analyze(db, llm, settings, job, cv_row, cv, prefs, stats, prepare)
+        page_client = http_client or httpx.Client(timeout=20, follow_redirects=True)
+        try:
+            for job in candidates[: prefs.deep_match_top_n]:
+                _deep_analyze(db, llm, settings, job, cv_row, cv, prefs, stats, prepare, page_client)
+        finally:
+            if http_client is None:
+                page_client.close()
         run.status = "ok"
     except LLMError as e:
         run.status, run.error = "error", str(e)
@@ -283,7 +323,14 @@ def run_agent(
 
 
 def _deep_analyze(db, llm, settings, job: Job, cv_row: CVProfile, cv: CVExtraction,
-                  prefs: SearchPreferences, stats: dict, prepare) -> None:
+                  prefs: SearchPreferences, stats: dict, prepare, client: httpx.Client | None = None) -> None:
+    url = job.source_url or job.apply_url
+    if client and (job.triage or {}).get("partial") and url:
+        # La fuente solo dio título y poco más (alertas, Breezy…): se lee la página pública de la oferta
+        extra = page_text(client, url)
+        if len(extra) > 300:
+            job.raw_text = f"{job.raw_text}\n\n{extra}"
+            job.triage = {**job.triage, "partial": False}
     details = analyze_job(llm, job.raw_text)
     job.details = details.model_dump(mode="json")
     job.title = details.title or job.title

@@ -499,3 +499,23 @@ dialog.sheet.out::backdrop { animation: fade var(--t) var(--ease) reverse both; 
 .compare-total { font-size: 20px; font-weight: 650; } .compare-total small { font-size: 12px; color: var(--text-3); font-weight: 450; }
 @media (max-width: 480px) { .nav button { padding: 0 6px; } .top-actions { gap: 0; } .top-actions .btn.icon { width: 30px; } }
 .compare-col .chip { justify-self: start; }
+
+/* ── Estado y gasto ─────────────────────────────────────────── */
+
+.diag { padding: 16px 18px; }
+.diag-row { display: flex; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--border); }
+.diag-row p { margin-top: 1px; }
+.diag-ico { width: 28px; height: 28px; flex: none; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); color: var(--text-3); }
+.diag-ico svg { width: 15px; height: 15px; }
+.diag-ico.ok { background: var(--ok-soft); color: var(--ok); }
+.diag-ico.warn { background: var(--warn-soft); color: var(--warn); }
+.diag-ico.bad { background: var(--bad-soft); color: var(--bad); }
+.diag-row.off { opacity: 0.75; }
+.spend-head { display: flex; gap: 18px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.spend-total { font-size: 28px; font-weight: 680; letter-spacing: -0.03em; }
+.spend-meter { display: grid; gap: 4px; min-width: 200px; flex: 0 1 260px; }
+.spend-meter > i { display: block; height: 10px; border-radius: 99px; background: linear-gradient(to right, var(--accent) var(--w), var(--surface-2) var(--w)); }
+.spend-meter > i.warn { background: linear-gradient(to right, var(--warn) var(--w), var(--surface-2) var(--w)); }
+.spend-meter > i.bad { background: linear-gradient(to right, var(--bad) var(--w), var(--surface-2) var(--w)); }
+.spend-meter small { color: var(--text-3); font-size: 12px; text-align: right; }
+.nav-alert { position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--bad); box-shadow: 0 0 0 2px var(--bg); }

@@ -1,6 +1,6 @@
 // Ficha de una candidatura: entrevista (fecha, Calendario, dossier) y seguimiento (correos redactados).
 import { api } from "./api.js";
-import { button, field, fmtDate, h, icon, list, tagInput, toast, urgencyChip } from "./ui.js";
+import { button, field, fmtDate, h, icon, list, tagInput, toast, toggle as toggleBox, urgencyChip } from "./ui.js";
 
 const STATUS = {
   por_aplicar: ["", "Por aplicar"], aplicado: ["ok", "Aplicado"], entrevista: ["warn", "Entrevista"], oferta: ["ok", "Oferta"],
@@ -169,16 +169,21 @@ function dossier(p) {
 }
 
 // ── Oferta: condiciones, negociación y comparación ─────────────
-const money = (n, cur = "EUR") => (n || n === 0) ? Number(n).toLocaleString("es-ES", { style: "currency", currency: cur, maximumFractionDigits: 0 }) : "—";
+const money = (n, cur = "EUR") => (n || n === 0)
+  ? Number(n).toLocaleString(cur === "CRC" ? "es-CR" : "es-ES", { style: "currency", currency: cur, maximumFractionDigits: 0 }) : "—";
 
 function offerSection(d, ctx, redraw) {
   if (!["entrevista", "oferta"].includes(d.status)) return null;
-  const o = d.offer || {};
+  const def = d.offer_defaults || {};
+  const o = { currency: def.currency, period: def.period, thirteenth: def.thirteenth, ...(d.offer || {}) };
   const num = (v, ph) => h("input", { class: "input", type: "number", min: 0, step: 500, value: v ?? "", placeholder: ph });
   const txt = (v, ph) => h("input", { class: "input", value: v ?? "", placeholder: ph || "" });
   const f = {
-    base: num(o.base_salary, "48000"), variable: num(o.variable, "0"),
-    currency: h("select", { class: "input" }, ["EUR", "USD", "GBP", "MXN", "ARS", "COP", "CLP"].map((c) => h("option", { selected: c === (o.currency || "EUR") }, c))),
+    base: num(o.base_salary, o.period === "mensual" ? "p. ej. 2500" : "p. ej. 48000"), variable: num(o.variable, "0"),
+    currency: h("select", { class: "input" }, [...new Set([o.currency || "EUR", "USD", "CRC", "MXN", "COP", "EUR", "ARS", "CLP", "PEN", "GTQ", "BRL"])]
+      .map((c) => h("option", { selected: c === (o.currency || "EUR") }, c))),
+    period: h("select", { class: "input" }, [["mensual", "Mensual"], ["anual", "Anual"]].map(([v, l]) => h("option", { value: v, selected: v === o.period }, l))),
+    thirteenth: toggleBox(o.thirteenth),
     modality: txt(o.modality, "remoto, híbrido 2 días…"), vacation: h("input", { class: "input", type: "number", min: 0, max: 60, value: o.vacation_days ?? "" }),
     start: h("input", { class: "input", type: "date", value: o.start_date || "" }), deadline: h("input", { class: "input", type: "date", value: o.deadline || "" }),
     equity: txt(o.equity, "stock options, RSU…"), benefits: txt(o.benefits, "seguro médico, formación, tickets…"),
@@ -186,13 +191,16 @@ function offerSection(d, ctx, redraw) {
   };
   const val = (el) => (el.value === "" ? null : el.type === "number" ? Number(el.value) : el.value.trim() || null);
   const form = h("div", { class: "stack", style: { gap: "12px" } },
-    h("div", { class: "grid-3" }, field("Salario fijo bruto anual", f.base), field("Variable anual", f.variable), field("Moneda", f.currency)),
+    h("div", { class: "grid-3" }, field("Salario fijo bruto", f.base), field("Se paga", f.period), field("Moneda", f.currency)),
+    h("div", { class: "grid-3" }, field("Variable / bonos al año", f.variable),
+      field("Aguinaldo (13.er salario)", f.thirteenth, def.country === "CR" ? "Obligatorio en Costa Rica" : null), h("div")),
     h("div", { class: "grid-3" }, field("Modalidad", f.modality), field("Días de vacaciones", f.vacation), field("Equity", f.equity)),
     h("div", { class: "grid-3" }, field("Incorporación", f.start), field("Responder antes de", f.deadline), field("Beneficios", f.benefits)),
     field("Notas", f.notes),
     h("div", { class: "row" }, button(d.offer ? "Guardar cambios" : "Guardar oferta", { kind: "primary", size: "sm", ico: "check", onClick: async () => {
       await api.put(`/api/applications/${ctx.id}/offer`, {
         base_salary: val(f.base), variable: val(f.variable), currency: f.currency.value, modality: val(f.modality),
+        period: f.period.value, thirteenth: f.thirteenth.input.checked,
         vacation_days: val(f.vacation), start_date: val(f.start), deadline: val(f.deadline), equity: val(f.equity),
         benefits: val(f.benefits), notes: val(f.notes) });
       ctx.touch();
@@ -208,10 +216,12 @@ function offerSection(d, ctx, redraw) {
     return section("oferta", "Oferta", form);
   }
 
-  const total = (o.base_salary || 0) + (o.variable || 0);
+  const total = d.offer_total || 0;
+  const monthly = o.period === "mensual";
   const summary = h("div", { class: "offer-summary" },
-    h("div", {}, h("b", {}, money(total, o.currency)), h("span", {}, "total anual"),
-      o.variable ? h("small", {}, `${money(o.base_salary, o.currency)} fijo + ${money(o.variable, o.currency)} variable`) : null),
+    h("div", {}, h("b", {}, money(monthly ? o.base_salary : total, o.currency)), h("span", {}, monthly ? "brutos al mes" : "total anual"),
+      h("small", {}, monthly ? `${money(total, o.currency)} al año${o.thirteenth ? " con aguinaldo" : ""}${o.variable ? " y variable" : ""}`
+        : o.variable ? `${money(o.base_salary, o.currency)} fijo + ${money(o.variable, o.currency)} variable` : "")),
     h("div", { class: "row", style: { gap: "6px" } },
       o.modality ? h("span", { class: "chip" }, o.modality) : null,
       o.vacation_days ? h("span", { class: "chip" }, `${o.vacation_days} días de vacaciones`) : null,
@@ -220,7 +230,9 @@ function offerSection(d, ctx, redraw) {
   const edit = button("Editar", { kind: "ghost", size: "sm", onClick: () => { edit.remove(); summary.replaceWith(form); } });
 
   const negoSlot = h("div");
-  const target = h("input", { class: "input", placeholder: "Qué te gustaría conseguir (p. ej. 52.000 € y 3 días de remoto)" });
+  const example = o.period === "mensual" ? money(Math.round((o.base_salary || 0) * 1.12 / 1000) * 1000 || 2500, o.currency)
+    : money(Math.round((o.base_salary || 0) * 1.1 / 1000) * 1000 || 52000, o.currency);
+  const target = h("input", { class: "input", placeholder: `Qué te gustaría conseguir (p. ej. ${example}${o.period === "mensual" ? " al mes" : ""} y 3 días de remoto)` });
   const prios = tagInput([], "Prioridades: salario, remoto, formación… (Enter)");
   const nego = h("div", { class: "card sunken stack", style: { padding: "14px 16px", gap: "10px", marginTop: "12px" } },
     h("p", { style: { fontWeight: 600 } }, "Preparar la negociación"),

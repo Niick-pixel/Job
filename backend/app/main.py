@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import ROOT_DIR, VERSION
 from .database import init_db
-from .routers import agent, applications, autofill, cv, emails, jobs, packages, settings, stats, system
+from .routers import agent, applications, autofill, cv, emails, jobs, packages, settings, stats, status, system
 
 WEB_DIR = ROOT_DIR / "frontend" / "web"
 CLIENT_HEADER = "x-jobtracker"
@@ -22,6 +22,9 @@ SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
+    moved = settings.migrate_to_keychain(settings.secret_names())
+    if moved:
+        print(f"[llavero] claves pasadas al Llavero de macOS: {', '.join(moved)}")
     if settings.migrate_cost_profile():
         print("[ajustes] instalación pasada al perfil económico (Claude Haiku)")
     yield
@@ -46,7 +49,7 @@ async def require_client_header(request: Request, call_next):
 
 
 for r in (cv.router, jobs.router, applications.router, autofill.router, emails.router, system.router, agent.router,
-          packages.router, settings.router, stats.router):
+          packages.router, settings.router, stats.router, status.router):
     app.include_router(r)
 
 if WEB_DIR.exists():

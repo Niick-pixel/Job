@@ -27,6 +27,11 @@ Fuentes ──► duplicados ──► filtros duros ──► criba rápida ─
 - **Descubre empresas**: escribe nombres y encuentra sus portales de Greenhouse, Lever o Ashby (Agente → Dónde busca).
 - **Desde el navegador**: botón «Guardar en JobTracker» para la barra de favoritos (Ajustes → Navegador).
 - **Resumen diario**: notificación cada mañana y tarjeta «Hoy» en la Bandeja.
+- **Costa Rica y Latinoamérica**:
+  - Workday (multinacionales), SmartRecruiters, Get on Board, Himalayas, Amazon, Recruitee, Breezy y Workable;
+  - descarta los remotos «solo EE. UU.»;
+  - ofertas en salario mensual con aguinaldo.
+- **Estado y gasto**: diagnóstico de todas las piezas, gasto en IA con tope mensual, claves en el Llavero de macOS.
 - **Rellena formularios por ti**: abre el formulario de Greenhouse, Lever, Ashby u otras webs en Chrome,
   lo rellena y sube tus documentos. El envío lo haces tú, nunca la app.
 - **Simulacro de entrevista** con puntuación STAR, y **asistente de ofertas** (negociación y comparación).
@@ -257,6 +262,7 @@ Correo ─Claude─► EmailClassification ─► mueve la tarjeta del Kanban + 
 | POST | `/api/applications/{id}/gmail-draft` | Borrador en Gmail dentro del hilo de la empresa |
 | GET | `/api/applications/export.csv` | Todas las candidaturas en CSV |
 | GET | `/api/stats` | Resultados: embudo, por fuente, por CV, tiempos, agente |
+| GET | `/api/status/diagnostics` · `/api/status/spend` | Estado de cada pieza · gasto en IA del mes y tope |
 | GET | `/capture` | Página de destino del botón del navegador (datos en el `#fragmento`) |
 
 ## Próximos pasos sugeridos

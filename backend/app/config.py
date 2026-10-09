@@ -15,6 +15,32 @@ DATA_DIR = Path(os.getenv("JOBTRACKER_DATA_DIR", ROOT_DIR / "data"))
 _ENV_FILES = (ROOT_DIR / ".env", JOBTRACKER_HOME / ".env") if JOBTRACKER_HOME else ROOT_DIR / ".env"
 
 
+def _env_index() -> dict[str, str]:
+    """Lectura mínima del .env (solo para saber qué claves viven en el Llavero de macOS)."""
+    out: dict[str, str] = {}
+    for f in (_ENV_FILES if isinstance(_ENV_FILES, tuple) else (_ENV_FILES,)):
+        try:
+            for line in Path(f).read_text(encoding="utf-8").splitlines():
+                name, sep, value = line.strip().partition("=")
+                if sep and not name.startswith("#"):
+                    out[name.strip()] = value.strip().strip("'\"")
+        except OSError:
+            continue
+    return out
+
+
+def load_keychain() -> None:
+    from . import keychain
+
+    try:
+        keychain.load_into_environ(_env_index())
+    except Exception as e:  # noqa: BLE001  (sin Llavero la app sigue con lo que haya en el .env)
+        print(f"[llavero] no se pudieron leer las claves: {e}")
+
+
+load_keychain()
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=_ENV_FILES, extra="ignore")
 

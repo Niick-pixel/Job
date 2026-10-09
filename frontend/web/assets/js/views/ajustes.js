@@ -5,11 +5,14 @@ import { THEMES, setMotion, setTheme } from "../theme.js";
 import { button, field, h, icon, pageHead, stagger, toast, toggle } from "../ui.js";
 
 export async function render(root, ctx) {
-  const [keys, ai, gmail, version] = await Promise.all([
+  const [keys, ai, gmail, version, diag, spend] = await Promise.all([
     api.get("/api/settings/keys"), api.get("/api/settings/ai"), api.get("/api/settings/gmail"), api.get("/api/system/version"),
+    api.get("/api/status/diagnostics").catch(() => null), api.get("/api/status/spend").catch(() => null),
   ]);
   root.replaceChildren(stagger(h("div", {},
     pageHead("Ajustes", "Todo se guarda solo en tu Mac"),
+    diag ? statusSection(diag, ctx) : null,
+    spend ? spendSection(spend, root, ctx) : null,
     appearance(),
     keysSection(keys, root, ctx),
     customKeys(keys, root, ctx),
@@ -20,6 +23,64 @@ export async function render(root, ctx) {
 }
 
 const section = (title, ...children) => h("div", {}, h("h2", { class: "section-title" }, title), ...children);
+const modelName = (id) => id.replace(/^claude-(\w+)-(\d+)-(\d+)$/, (_, n, a, b) => `Claude ${n[0].toUpperCase()}${n.slice(1)} ${a}.${b}`);
+const usd = (n) => `${Number(n || 0).toLocaleString("es-CR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} $`;
+
+// ── Estado (diagnóstico) ─────────────────────────────────────────
+const STATUS_ICON = { ok: ["ok", "check"], warn: ["warn", "alert"], error: ["bad", "x"], off: ["", "clock"] };
+
+function statusSection(d, ctx) {
+  const problems = d.summary.error + d.summary.warn;
+  const rows = d.checks.map((c) => {
+    const [kind, ico] = STATUS_ICON[c.status];
+    return h("div", { class: `diag-row ${c.status}` },
+      h("span", { class: `diag-ico ${kind}` }, icon(ico)),
+      h("div", { style: { flex: 1, minWidth: 0 } }, h("b", {}, c.label), h("p", { class: "muted small" }, c.detail)),
+      c.action ? button(c.action.label, { size: "sm", onClick: () => {
+        if (c.action.route === "ajustes" && c.action.anchor) document.getElementById(`sec-${c.action.anchor}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+        else ctx.go(c.action.route);
+      } }) : null);
+  });
+  return h("div", { id: "sec-estado" }, h("h2", { class: "section-title" }, "Estado"),
+    h("section", { class: "card diag" },
+      h("div", { class: "row between", style: { marginBottom: "6px" } },
+        h("p", { style: { fontWeight: 600 } }, problems ? `${problems} cosa${problems > 1 ? "s" : ""} por revisar` : "Todo en orden"),
+        h("span", { class: "faint small" }, `Versión ${d.version}`)),
+      rows));
+}
+
+// ── Gasto en IA ──────────────────────────────────────────────────
+function spendSection(s, root, ctx) {
+  const ratio = s.budget_usd ? Math.min(1, s.month_usd / s.budget_usd) : null;
+  const max = Math.max(...s.by_purpose.map((p) => p.cost_usd), 0.0001);
+  const budget = h("input", { class: "input", type: "number", min: 0, max: 1000, step: 0.5, value: s.budget_usd ?? "",
+    placeholder: "Sin tope", style: { maxWidth: "130px" } });
+  const save = button("Guardar tope", { size: "sm", ico: "check", onClick: async () => {
+    const prefs = await api.get("/api/agent/preferences");
+    await api.put("/api/agent/preferences", { ...prefs, monthly_budget_usd: budget.value === "" ? null : Number(budget.value) });
+    toast(budget.value === "" ? "Sin tope de gasto" : `Tope guardado: ${usd(budget.value)} al mes`);
+    await render(root, ctx);
+  } });
+  return h("div", { id: "sec-gasto" }, h("h2", { class: "section-title" }, "Gasto en IA"),
+    h("section", { class: "card stack" },
+      h("div", { class: "spend-head" },
+        h("div", {}, h("b", { class: "spend-total" }, usd(s.month_usd)), h("span", { class: "muted" }, " este mes"),
+          h("p", { class: "faint small" }, `Previsión a fin de mes: ${usd(s.projected_usd)} · ${s.calls} llamada${s.calls === 1 ? "" : "s"} a Claude · modelo ${modelName(s.model)}`)),
+        ratio !== null ? h("div", { class: "spend-meter", title: `${Math.round(ratio * 100)} % del tope` },
+          h("i", { class: ratio >= 1 ? "bad" : ratio >= 0.8 ? "warn" : "", style: { "--w": `${Math.max(ratio * 100, 2)}%` } }),
+          h("small", {}, `${Math.round(ratio * 100)} % de ${usd(s.budget_usd)}`)) : null),
+      s.by_purpose.length ? h("div", { class: "stack", style: { gap: "8px" } }, s.by_purpose.map((p) =>
+        h("div", { class: "bar-row" }, h("span", { class: "bar-label" }, p.purpose),
+          h("div", { class: "bar" }, h("i", { class: "accent", style: { "--w": `${Math.max((100 * p.cost_usd) / max, 2)}%` } })),
+          h("span", { class: "bar-value" }, usd(p.cost_usd), h("small", {}, ` · ${p.calls}`))))) :
+        h("p", { class: "muted small" }, "Aún no hay llamadas a la IA este mes."),
+      h("hr", { class: "divider", style: { margin: "4px 0" } }),
+      h("div", { class: "row between" },
+        h("div", { style: { flex: "1 1 260px", minWidth: 0 } }, h("p", { style: { fontWeight: 550 } }, "Tope mensual (USD)"),
+          h("p", { class: "faint small" }, "Al 80 % te avisamos; al llegar, el agente se pausa hasta el mes siguiente. Lo que hagas tú a mano sigue funcionando.")),
+        h("div", { class: "row", style: { flexWrap: "nowrap" } }, budget, save)),
+      h("p", { class: "faint small" }, icon("alert"), " Es una estimación con los precios públicos de Claude. La factura exacta está en console.anthropic.com.")));
+}
 
 // ── Apariencia ───────────────────────────────────────────────────
 function appearance() {
@@ -53,7 +114,9 @@ function appearance() {
 function keysSection(data, root, ctx) {
   const groups = {};
   for (const k of data.keys) (groups[k.group] ||= []).push(k);
-  return section("Claves API", ...Object.entries(groups).map(([group, keys]) => h("div", { style: { marginBottom: "14px" } },
+  return h("div", { id: "sec-claves" }, h("h2", { class: "section-title" }, "Claves API"),
+    data.keychain ? h("p", { class: "faint small center", style: { marginBottom: "12px" } }, icon("shield"), " Se guardan en el Llavero de macOS, cifradas") : null,
+    ...Object.entries(groups).map(([group, keys]) => h("div", { style: { marginBottom: "14px" } },
     h("p", { class: "faint small center", style: { marginBottom: "10px" } }, group),
     h("div", { class: "stack" }, keys.map((k) => keyCard(k, root, ctx))))));
 }
@@ -210,7 +273,7 @@ function gmailSection(g, root, ctx) {
     } catch (e) { toast(e.message, "error", 6000); }
   });
   const state = g.connected ? ["ok", "Conectado"] : g.credentials ? ["warn", "Falta autorizar"] : ["", "Modo de prueba"];
-  return section("Correo",
+  return h("div", { id: "sec-gmail" }, h("h2", { class: "section-title" }, "Correo"),
     h("section", { class: "card" },
       h("div", { class: "row between", style: { alignItems: "flex-start" } },
         h("div", { style: { flex: 1 } }, h("h3", {}, "Gmail"),

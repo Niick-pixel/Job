@@ -169,3 +169,16 @@ class Feedback(SQLModel, table=True):
     title: str = ""
     company: str | None = None
     created_at: datetime = Field(default_factory=_now)
+
+
+class LLMUsage(SQLModel, table=True):
+    """Una llamada a Claude: tokens y coste estimado (ver services/usage.py)."""
+    id: int | None = Field(default=None, primary_key=True)
+    model: str
+    purpose: str = "Otros"
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_write_tokens: int = 0
+    cache_read_tokens: int = 0
+    cost_usd: float = 0.0
+    created_at: datetime = Field(default_factory=_now, index=True)

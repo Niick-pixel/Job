@@ -66,6 +66,16 @@ function preferencesForm(p, root, ctx) {
     adzuna: tagInput(src.adzuna_queries, "p. ej. desarrollador python"),
     country: h("input", { class: "input", value: src.adzuna_country || "es", maxlength: 2 }),
     alerts: toggle(src.email_alerts),
+    countrySel: h("select", { class: "input" }, h("option", { value: "" }, "Sin indicar"),
+      COUNTRIES.map(([code, name]) => h("option", { value: code, selected: code === p.country }, name))),
+    workday: tagInput(src.workday, "URL: empresa.wd1.myworkdayjobs.com/Sitio"),
+    smartrecruiters: tagInput(src.smartrecruiters, "identificador, p. ej. Visa"),
+    recruitee: tagInput(src.recruitee, "empresa (empresa.recruitee.com)"),
+    breezy: tagInput(src.breezy, "empresa (empresa.breezy.hr)"),
+    workable: tagInput(src.workable, "cuenta (apply.workable.com/cuenta)"),
+    getonbrd: tagInput(src.getonbrd_queries, "p. ej. python, data"),
+    himalayas: toggle(src.himalayas),
+    amazon: toggle(src.amazon),
     digest: toggle(p.digest_enabled ?? true),
     reminders: toggle(p.interview_reminders ?? true),
     digestHour: h("select", { class: "input", style: { width: "auto" } },
@@ -81,10 +91,13 @@ function preferencesForm(p, root, ctx) {
     max_age_days: Number(f.maxAge.value) || 30, triage_threshold: f.triage.value, prepare_threshold: f.prepare.value,
     deep_match_top_n: Number(f.topN.value) || 10,
     digest_enabled: f.digest.input.checked, digest_hour: Number(f.digestHour.value),
-    interview_reminders: f.reminders.input.checked,
+    interview_reminders: f.reminders.input.checked, country: f.countrySel.value || null,
     sources: { ...src, greenhouse: f.greenhouse.value, lever: f.lever.value, ashby: f.ashby.value,
       remotive_queries: f.remotive.value, adzuna_queries: f.adzuna.value,
-      adzuna_country: (f.country.value || "es").toLowerCase(), email_alerts: f.alerts.input.checked },
+      adzuna_country: (f.country.value || "es").toLowerCase(), email_alerts: f.alerts.input.checked,
+      workday: f.workday.value, smartrecruiters: f.smartrecruiters.value, recruitee: f.recruitee.value, breezy: f.breezy.value,
+      workable: f.workable.value, getonbrd_queries: f.getonbrd.value, himalayas: f.himalayas.input.checked,
+      amazon: f.amazon.input.checked },
   });
   const save = button("Guardar cambios", {
     kind: "primary", ico: "check",
@@ -117,13 +130,26 @@ function preferencesForm(p, root, ctx) {
 
     h("h2", { class: "section-title" }, "Dónde busca"),
     h("section", { class: "card stack" },
-      discoverBox(addBoard),
+      h("div", { class: "row between" },
+        h("div", { style: { flex: "1 1 260px", minWidth: 0 } }, h("p", { style: { fontWeight: 600 } }, "Tu país"),
+          h("p", { class: "faint small" }, "Descarta remotos que solo contratan en otros países y adapta salarios, aguinaldo y tono de los correos.")),
+        h("div", { style: { width: "220px" } }, f.countrySel)),
+      h("div", { class: "grid-2" },
+        field("Get on Board", f.getonbrd, "El portal tecnológico de Latinoamérica"),
+        h("div", { class: "stack", style: { gap: "4px" } },
+          row("Himalayas (remoto)", "Solo los abiertos a tu país o a Latinoamérica", f.himalayas),
+          row("Amazon", "Su buscador de empleo, filtrado por tu país", f.amazon))),
+      h("hr", { class: "divider", style: { margin: "4px 0" } }),
+      discoverBox(addBoard, f.countrySel),
       h("hr", { class: "divider", style: { margin: "4px 0" } }),
       h("p", { class: "muted small" }, "O añádelas a mano: el identificador está en la URL de la página de empleo de la empresa, p. ej. boards.greenhouse.io/",
         h("b", {}, "airbnb"), ", jobs.lever.co/", h("b", {}, "empresa"), ", jobs.ashbyhq.com/", h("b", {}, "empresa"), "."),
       h("div", { class: "grid-3" }, field("Greenhouse", f.greenhouse), field("Lever", f.lever), field("Ashby", f.ashby)),
-      h("div", { class: "grid-3" }, field("Remotive (remoto)", f.remotive), field("Adzuna", f.adzuna, "Requiere clave en Ajustes"), field("País Adzuna", f.country)),
-      row("Alertas de empleo de tu correo", "LinkedIn, InfoJobs, Indeed… (la vía segura para LinkedIn)", f.alerts)),
+      field("Workday", f.workday, "Multinacionales (Intel, P&G, Boston Scientific…): pega la URL de su web de empleo"),
+      h("div", { class: "grid-2" }, field("SmartRecruiters", f.smartrecruiters, "Se filtra por tu país"), field("Workable", f.workable)),
+      h("div", { class: "grid-2" }, field("Recruitee", f.recruitee), field("Breezy", f.breezy)),
+      h("div", { class: "grid-3" }, field("Remotive (remoto)", f.remotive), field("Adzuna", f.adzuna, "Requiere clave · cubre México y Brasil, no Centroamérica"), field("País Adzuna", f.country)),
+      row("Alertas de empleo de tu correo", "LinkedIn, Computrabajo, elempleo, Empleos.net, Bumeran, InfoJobs… (la vía segura para LinkedIn)", f.alerts)),
 
     h("div", { class: "row", style: { justifyContent: "center", marginTop: "20px" } },
       button("Rellenar desde mi CV", { ico: "sparkles", onClick: async () => {
@@ -135,10 +161,22 @@ function preferencesForm(p, root, ctx) {
       save));
 }
 
-const PROVIDER = { greenhouse: "Greenhouse", lever: "Lever", ashby: "Ashby" };
+const PROVIDER = { greenhouse: "Greenhouse", lever: "Lever", ashby: "Ashby", smartrecruiters: "SmartRecruiters",
+  recruitee: "Recruitee", breezy: "Breezy", workable: "Workable", workday: "Workday" };
+const COUNTRIES = [["CR", "Costa Rica"], ["MX", "México"], ["CO", "Colombia"], ["AR", "Argentina"], ["CL", "Chile"], ["PE", "Perú"],
+  ["GT", "Guatemala"], ["PA", "Panamá"], ["SV", "El Salvador"], ["HN", "Honduras"], ["DO", "República Dominicana"],
+  ["UY", "Uruguay"], ["EC", "Ecuador"], ["BR", "Brasil"], ["ES", "España"]];
+// Empresas tecnológicas y de servicios con oficinas en Costa Rica (punto de partida: la app comprueba su portal)
+const CR_COMPANIES = ["Gorilla Logic", "Wizeline", "Encora", "Akurey", "Accenture", "IBM", "Oracle", "Equifax", "Experian",
+  "Fiserv", "Western Union", "Concentrix", "HP", "Intel", "Procter & Gamble"];
 
-function discoverBox(addBoard) {
+function discoverBox(addBoard, countrySel) {
   const names = tagInput([], "Escribe empresas o pega la URL de su página de empleo");
+  const suggest = button("Sugerir empresas en Costa Rica", { size: "sm", kind: "ghost", ico: "sparkles", onClick: () => {
+    let added = 0;
+    for (const c of CR_COMPANIES) if (names.add(c)) added++;
+    toast(added ? `${added} empresas añadidas a la búsqueda: quita las que no te interesen` : "Ya estaban todas");
+  } });
   const results = h("div", { class: "stack", style: { gap: "8px" } });
   const search = button("Buscar portales", {
     kind: "primary", ico: "search",
@@ -155,14 +193,16 @@ function discoverBox(addBoard) {
               b.jobs ? `${b.jobs} ofertas · p. ej. ${b.sample.slice(0, 2).join(" · ")}` : "Sin ofertas publicadas ahora mismo")),
           h("a", { class: "btn ghost sm", href: b.url, target: "_blank", rel: "noopener" }, icon("external")),
           button("Añadir", { size: "sm", ico: "plus", onClick: async (_, btn) => { await addBoard(b); btn.replaceWith(h("span", { class: "chip ok" }, icon("check"), "Añadida")); } }))),
-        r.missing.length ? h("p", { class: "faint small" }, `Sin portal en Greenhouse, Lever ni Ashby: ${r.missing.join(", ")}. `,
-          "Puede que usen otro sistema (Workday, InfoJobs…): sus ofertas te llegarán por las alertas de correo.") : "");
+        r.missing.length ? h("p", { class: "faint small" }, `No encontradas por nombre: ${r.missing.join(", ")}. `,
+          "Muchas multinacionales usan Workday: abre su web de empleo, copia la URL (tipo empresa.wd1.myworkdayjobs.com/…) y pégala aquí. ",
+          "Si no, sus ofertas te llegarán por las alertas de LinkedIn o Computrabajo en tu correo.") : "");
     },
   });
   return h("div", { class: "stack", style: { gap: "10px" } },
     h("div", {}, h("p", { style: { fontWeight: 600 } }, "Descubrir empresas"),
-      h("p", { class: "faint small" }, "Escribe las empresas que te interesan y la app encuentra sus portales de empleo. Revisa los resultados antes de añadirlos.")),
+      h("p", { class: "faint small" }, "Escribe las empresas que te interesan (o pega la URL de su web de empleo) y la app encuentra su portal: Greenhouse, Lever, Ashby, SmartRecruiters, Workable, Recruitee, Breezy o Workday. Revisa los resultados antes de añadirlos.")),
     h("div", { class: "row", style: { flexWrap: "nowrap", alignItems: "flex-start" } }, h("div", { style: { flex: 1 } }, names), search),
+    countrySel.value === "CR" || !countrySel.value ? h("div", {}, suggest) : null,
     results);
 }
 

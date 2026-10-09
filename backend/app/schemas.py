@@ -229,7 +229,9 @@ class EmailIn(BaseModel):
 
 
 class OfferDetails(BaseModel):
-    base_salary: float | None = Field(None, ge=0, description="Salario fijo bruto anual")
+    base_salary: float | None = Field(None, ge=0, description="Salario fijo bruto (anual o mensual según period)")
+    period: Literal["anual", "mensual"] = "anual"
+    thirteenth: bool = Field(False, description="Aguinaldo / 13.er salario (en Costa Rica es obligatorio)")
     variable: float | None = Field(None, ge=0, description="Variable/bonus anual bruto esperado")
     currency: str = "EUR"
     equity: str | None = None
@@ -291,6 +293,15 @@ class SourcesConfig(BaseModel):
     adzuna_queries: list[str] = Field(default_factory=list, description="búsquedas en Adzuna (requiere API key)")
     adzuna_country: str = "es"
     email_alerts: bool = True
+    # Latinoamérica / Costa Rica (0.8.0)
+    workday: list[str] = Field(default_factory=list, description="URLs de webs de empleo Workday: empresa.wd1.myworkdayjobs.com/Sitio")
+    smartrecruiters: list[str] = Field(default_factory=list, description="empresas en SmartRecruiters (filtradas por tu país)")
+    recruitee: list[str] = Field(default_factory=list, description="empresas: <empresa>.recruitee.com")
+    breezy: list[str] = Field(default_factory=list, description="empresas: <empresa>.breezy.hr")
+    workable: list[str] = Field(default_factory=list, description="cuentas: apply.workable.com/<cuenta>")
+    getonbrd_queries: list[str] = Field(default_factory=list, description="búsquedas en Get on Board (tecnología, LatAm)")
+    himalayas: bool = False
+    amazon: bool = False
 
 
 class SearchPreferences(BaseModel):
@@ -310,6 +321,10 @@ class SearchPreferences(BaseModel):
     digest_enabled: bool = True
     digest_hour: int = Field(9, ge=0, le=23, description="Hora local del resumen diario")
     interview_reminders: bool = True
+    country: str | None = Field(None, description="ISO de 2 letras de tu país (p. ej. CR): filtra remotos y adapta salarios")
+    region_checked: bool = False  # 0.8.0: se dedujo una vez el país del CV en instalaciones ya configuradas
+    monthly_budget_usd: float | None = Field(None, ge=0, le=1000,
+                                             description="Tope de gasto en IA al mes: al alcanzarlo el agente se pausa")
     sources: SourcesConfig = Field(default_factory=SourcesConfig)
 
 
@@ -321,6 +336,9 @@ class PreferencesProposal(BaseModel):
     remotive_queries: list[str] = Field(description="1-3 búsquedas cortas en inglés para un portal remoto, p. ej. 'python backend'")
     adzuna_queries: list[str] = Field(description="1-3 búsquedas cortas de puesto en el idioma del país del candidato")
     adzuna_country: str = Field(description="Código ISO de 2 letras del país del candidato en minúscula, p. ej. 'es'")
+    country: str | None = Field(None, description="Código ISO de 2 letras del país de residencia del candidato en MAYÚSCULA, p. ej. 'CR'")
+    getonbrd_queries: list[str] = Field(default_factory=list,
+                                        description="Si su perfil es tecnológico: 1-3 búsquedas cortas en inglés, p. ej. 'python'; si no, vacío")
 
 
 class TriageItem(BaseModel):

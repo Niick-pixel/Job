@@ -2,6 +2,39 @@
 
 Las notas de cada versión se muestran dentro de la app al ofrecer la actualización.
 
+## 0.8.0
+
+**Costa Rica y Latinoamérica**
+- **Tu país** (Agente → Dónde busca). Si ya usabas la app, se deduce de tu CV en la próxima búsqueda. Con él:
+  - se descartan las ofertas «remotas» que solo contratan en EE. UU., Europa, etc.;
+  - se mantienen las abiertas a Latinoamérica o a tu país.
+- **Fuentes nuevas**:
+  - **Workday**: el portal de empleo de muchas multinacionales con sede en Costa Rica (Intel, P&G, Boston
+    Scientific…). Basta con pegar la URL de su web de empleo.
+  - **SmartRecruiters**, filtrado por tu país.
+  - **Get on Board**, el portal tecnológico latinoamericano.
+  - **Himalayas**: remotos abiertos a la región.
+  - **Amazon**: su buscador de empleo, filtrado por tu país.
+  - **Recruitee, Breezy y Workable**: plataformas de empleo de muchas startups.
+- **Descubrir empresas** detecta todas esas plataformas e incluye un botón con empresas tecnológicas y de
+  servicios con oficinas en Costa Rica.
+- **Alertas por correo** de Computrabajo, elempleo, Empleos.net, Bumeran, OCC, Get on Board y más.
+- **Ofertas en salario mensual con aguinaldo**, en colones o dólares: el total anual se calcula solo.
+  La negociación tiene en cuenta las costumbres del país (en Costa Rica: CCSS, aguinaldo, vacaciones de ley,
+  asociación solidarista, teletrabajo, trato de «usted»).
+- Para fuentes que solo dan el título de la oferta, el agente lee su página pública antes de analizarla.
+
+**Control y tranquilidad**
+- **Estado** (Ajustes): todas las piezas de un vistazo, con un botón para arreglar cada una:
+  - clave de Claude, CV, agente y fuentes;
+  - Gmail, navegador;
+  - copias de seguridad, actualizaciones, gasto y disco.
+  Si algo está roto, un punto rojo en el icono de Ajustes te avisa.
+- **Gasto en IA**: lo que llevas este mes, la previsión a fin de mes y en qué se va. Puedes poner un
+  **tope mensual**: al 80 % te avisa y al llegar, el agente se pausa hasta el mes siguiente.
+- **Claves en el Llavero de macOS**: las claves API se guardan cifradas en el Llavero en lugar de en un
+  archivo de texto. Las que ya tenías se mueven solas al arrancar.
+
 ## 0.7.0
 
 - **Rellenar formularios**: botón «Rellenar formulario» en la Bandeja. Abre el formulario de la oferta

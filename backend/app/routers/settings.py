@@ -9,7 +9,9 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from ..config import DATA_DIR, get_settings
-from ..services.secrets import NAME_RE, env_path, mask, read_env, write_env
+from .. import keychain
+from ..services.secrets import (NAME_RE, delete_secret, env_path, keychain_names, mask, migrate_to_keychain, read_env,
+                                store_secret, write_env)
 
 router = APIRouter(prefix="/api/settings", tags=["Ajustes"])
 
@@ -41,7 +43,13 @@ KNOWN_KEYS = [
 KNOWN = {k["name"] for k in KNOWN_KEYS}
 # Variables de configuración que no son secretos (se gestionan en otras secciones)
 CONFIG_VARS = {"LLM_MODEL", "LLM_FAST_MODEL", "LLM_EFFORT", "COST_PROFILE", "EMAIL_MODE", "DATABASE_URL", "UPLOAD_DIR",
-               "MATCH_LLM_WEIGHT", "BACKEND_URL", "GMAIL_CREDENTIALS_FILE", "GMAIL_TOKEN_FILE", "GMAIL_QUERY"}
+               "MATCH_LLM_WEIGHT", "BACKEND_URL", "GMAIL_CREDENTIALS_FILE", "GMAIL_TOKEN_FILE", "GMAIL_QUERY",
+               "KEYCHAIN_KEYS"}
+
+
+def secret_names() -> set[str]:
+    """Todo lo que se guarda como clave (conocidas + personalizadas), no la configuración."""
+    return KNOWN | {n for n in read_env() if n not in CONFIG_VARS} | set(keychain_names())
 
 MODELS = [
     {"id": "claude-opus-5-5", "label": "Claude Opus 5.5", "note": "El más capaz · recomendado"},
@@ -89,10 +97,13 @@ class KeyIn(BaseModel):
 @router.get("/keys")
 def list_keys():
     env = read_env()
-    keys = [{**k, "configured": bool(_current(k["name"])), "preview": mask(_current(k["name"]))} for k in KNOWN_KEYS]
-    custom = [{"name": n, "preview": mask(v), "configured": bool(v)}
-              for n, v in sorted(env.items()) if n not in KNOWN and n not in CONFIG_VARS]
-    return {"path": str(env_path()), "keys": keys, "custom": custom}
+    in_keychain = set(keychain_names(env))
+    where = lambda n: "llavero" if n in in_keychain else ("env" if env.get(n) else None)  # noqa: E731
+    keys = [{**k, "configured": bool(_current(k["name"])), "preview": mask(_current(k["name"])), "stored": where(k["name"])}
+            for k in KNOWN_KEYS]
+    names = sorted({n for n in env if n not in KNOWN and n not in CONFIG_VARS} | (in_keychain - KNOWN))
+    custom = [{"name": n, "preview": mask(_current(n)), "configured": bool(_current(n)), "stored": where(n)} for n in names]
+    return {"path": str(env_path()), "keys": keys, "custom": custom, "keychain": keychain.available()}
 
 
 @router.put("/keys")
@@ -105,17 +116,17 @@ def save_key(payload: KeyIn):
     if not value:
         raise HTTPException(422, "La clave está vacía")
     try:
-        write_env({name: value})
+        stored = store_secret(name, value)
     except ValueError as e:
         raise HTTPException(422, str(e)) from e
-    return {"name": name, "configured": True, "preview": mask(value)}
+    return {"name": name, "configured": True, "preview": mask(value), "stored": stored}
 
 
 @router.delete("/keys/{name}", status_code=204)
 def delete_key(name: str):
     if not NAME_RE.match(name) or name in CONFIG_VARS:
         raise HTTPException(422, "Nombre inválido")
-    write_env({name: None})
+    delete_secret(name)
 
 
 @router.post("/keys/{name}/test")

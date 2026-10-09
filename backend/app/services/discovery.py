@@ -1,4 +1,8 @@
-"""Descubrir en qué ATS publica cada empresa (Greenhouse, Lever, Ashby) y con qué identificador.
+"""Descubrir en qué plataforma de empleo publica cada empresa y con qué identificador.
+
+Por nombre se prueban Greenhouse, Lever, Ashby, SmartRecruiters, Recruitee, Breezy y Workable. Workday
+(muy usado por multinacionales en Costa Rica) no se puede adivinar: se detecta pegando la URL de la web
+de empleo (empresa.wd1.myworkdayjobs.com/Sitio).
 
 El usuario escribe nombres («Glovo, La Fourche») o pega la URL de su página de empleo. Para cada
 nombre se prueban unas pocas variantes de identificador contra las APIs públicas, en paralelo.
@@ -23,13 +27,24 @@ URL_PATTERNS = [
     ("greenhouse", re.compile(r"(?:boards|job-boards)(?:\.eu)?\.greenhouse\.io/(?:embed/job_board\?for=)?([\w-]+)", re.I)),
     ("lever", re.compile(r"jobs\.(?:eu\.)?lever\.co/([\w-]+)", re.I)),
     ("ashby", re.compile(r"jobs\.ashbyhq\.com/([\w.-]+)", re.I)),
+    ("smartrecruiters", re.compile(r"(?:careers|jobs)\.smartrecruiters\.com/([\w-]+)", re.I)),
+    ("recruitee", re.compile(r"([\w-]+)\.recruitee\.com", re.I)),
+    ("breezy", re.compile(r"([\w-]+)\.breezy\.hr", re.I)),
+    ("workable", re.compile(r"apply\.workable\.com/([\w-]+)", re.I)),
 ]
+WORKDAY = re.compile(r"(https?://[\w-]+\.wd\d+\.myworkdayjobs\.com/(?:[a-z]{2}-[A-Z]{2}/)?[\w-]+)", re.I)
 
 CAREERS_URL = {
     "greenhouse": "https://boards.greenhouse.io/{slug}",
     "lever": "https://jobs.lever.co/{slug}",
     "ashby": "https://jobs.ashbyhq.com/{slug}",
+    "smartrecruiters": "https://careers.smartrecruiters.com/{slug}",
+    "recruitee": "https://{slug}.recruitee.com",
+    "breezy": "https://{slug}.breezy.hr",
+    "workable": "https://apply.workable.com/{slug}",
+    "workday": "{slug}",
 }
+BY_NAME = ("greenhouse", "lever", "ashby", "smartrecruiters", "recruitee", "breezy", "workable")
 
 
 @dataclass
@@ -67,10 +82,15 @@ def slug_variants(name: str) -> list[str]:
 
 
 def parse_url(text: str) -> tuple[str, str] | None:
+    if m := WORKDAY.search(text):
+        return "workday", m.group(1)
     for provider, pattern in URL_PATTERNS:
         m = pattern.search(text)
         if m:
-            return provider, m.group(1).lower()
+            slug = m.group(1).lower()
+            if provider in ("recruitee", "breezy") and slug in ("www", "app", "api", "careers", "jobs"):
+                continue
+            return provider, slug
     return None
 
 
@@ -100,6 +120,44 @@ def probe(client: httpx.Client, provider: str, slug: str) -> tuple[int, list[str
         if not isinstance(data, list):
             return None
         return len(data), [j.get("text", "") for j in data[:3]]
+    if provider == "smartrecruiters":
+        data = _get(client, f"https://api.smartrecruiters.com/v1/companies/{slug}/postings", limit=3)
+        jobs = data.get("content") if isinstance(data, dict) else None
+        if not jobs:  # responde 200 vacío para cualquier nombre: solo cuenta si hay ofertas
+            return None
+        return data.get("totalFound", len(jobs)), [j.get("name", "") for j in jobs[:3]]
+    if provider == "recruitee":
+        data = _get(client, f"https://{slug}.recruitee.com/api/offers/")
+        if not isinstance(data, dict) or "offers" not in data:
+            return None
+        return len(data["offers"]), [o.get("title", "") for o in data["offers"][:3]]
+    if provider == "breezy":
+        data = _get(client, f"https://{slug}.breezy.hr/json")
+        if not isinstance(data, list):
+            return None
+        return len(data), [p.get("name", "") for p in data[:3]]
+    if provider == "workable":
+        data = _get(client, f"https://apply.workable.com/api/v1/widget/accounts/{slug}")
+        if not isinstance(data, dict) or "jobs" not in data:
+            return None
+        return len(data["jobs"]), [j.get("title", "") for j in data["jobs"][:3]]
+    if provider == "workday":
+        from .sources_latam import parse_workday
+
+        parsed = parse_workday(slug)
+        if not parsed:
+            return None
+        tenant, wd, site = parsed
+        try:
+            r = client.post(f"https://{tenant}.{wd}.myworkdayjobs.com/wday/cxs/{tenant}/{site}/jobs",
+                            json={"appliedFacets": {}, "limit": 3, "offset": 0, "searchText": ""},
+                            headers={"User-Agent": USER_AGENT, "Accept": "application/json"}, timeout=10)
+            data = r.json() if r.status_code == 200 else None
+        except (httpx.HTTPError, ValueError):
+            data = None
+        if not isinstance(data, dict) or "jobPostings" not in data:
+            return None
+        return data.get("total", 0), [j.get("title", "") for j in data["jobPostings"][:3]]
     if provider == "ashby":
         data = _get(client, f"https://api.ashbyhq.com/posting-api/job-board/{slug}")
         jobs = data.get("jobs") if isinstance(data, dict) else None
@@ -118,8 +176,9 @@ def discover(client: httpx.Client, queries: list[str]) -> list[dict]:
         if direct:
             tasks.append((q, *direct))
             continue
-        for slug in slug_variants(q):
-            for provider in ("greenhouse", "lever", "ashby"):
+        for i, slug in enumerate(slug_variants(q)):
+            # Las plataformas nuevas solo con las variantes más probables (menos peticiones)
+            for provider in (BY_NAME if i < 2 else BY_NAME[:3]):
                 tasks.append((q, provider, slug))
 
     def run(task):
