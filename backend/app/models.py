@@ -80,6 +80,7 @@ class Application(SQLModel, table=True):
     # Las fechas «sin zona» son hora local del usuario (lo que escribe o lo que dice el correo)
     interview_at: datetime | None = None
     follow_up_at: datetime | None = None  # último seguimiento enviado
+    follow_up_draft_at: datetime | None = None  # último borrador de seguimiento dejado en Gmail
     offer: dict = Field(default_factory=dict, sa_column=Column(JSON))  # condiciones de la oferta (ver schemas.OfferDetails)
     updated_at: datetime = Field(default_factory=_now)
 

@@ -2,6 +2,36 @@
 
 Las notas de cada versión se muestran dentro de la app al ofrecer la actualización.
 
+## 0.9.0 — resultados más precisos y más automatización
+
+**Que el agente busque lo que tú quieres** (Agente)
+- **Lo que buscas**: tu perfil ideal, es decir, puestos que quieres y que no, nivel, salario mínimo
+  mensual, modalidad, sectores, imprescindibles y lo que descarta una oferta. La criba y el análisis
+  lo usan; antes solo miraban tu CV.
+- **Calibrar (2 min)**: votas unas 15 ofertas variadas (👍 / 👎, con flechas del teclado) y la IA deduce tu
+  perfil ideal y nuevas búsquedas. Nada se aplica hasta que lo confirmas.
+- **👍 / 👎 en cualquier oferta**, también en las que el agente descartó. Busca más como las que te
+  gustan y menos como las que no. Si te gusta una descartada, puedes prepararla al momento.
+- **«¿Por qué no vi esta oferta?»**: pega el enlace (o el texto) de una oferta y te dice si tus fuentes
+  no la cubren, qué filtro la descartó o qué puntuación le dio la IA y por qué. Con un clic, añade la
+  empresa a tus fuentes o prepara la candidatura.
+- **Búsquedas con IA**: genera los términos de búsqueda de cada portal a partir de tu CV y de lo que buscas.
+- **Análisis final con Claude Sonnet** para las mejores ofertas del día (6 al día por defecto, ≈ 0,01 $
+  cada una). El resto se sigue haciendo con el modelo económico, y tu tope de gasto sigue mandando.
+- Los puestos que no quieres se descartan por el título sin gastar IA.
+
+**Más automático**
+- **Aplicar en serie** (Bandeja): con varias candidaturas aprobadas, abre y rellena sus formularios uno
+  tras otro. Tú revisas y envías cada uno.
+- **Borradores de seguimiento automáticos**: si una empresa no contesta en 7 días, el correo de
+  seguimiento queda como borrador en Gmail, dentro del hilo. Nunca se envía solo.
+- **Afinar**: sugerencias calculadas con tus datos, aplicables con un clic:
+  - pausar fuentes que solo traen ruido;
+  - dejar de mostrar empresas que siempre descartas;
+  - bajar el umbral si te gustan ofertas que el agente puntuó bajo;
+  - revisar filtros que descartan demasiado.
+  Aviso semanal y en la tarjeta «Hoy».
+
 ## 0.8.0
 
 **Costa Rica y Latinoamérica**

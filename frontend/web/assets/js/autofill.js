@@ -95,3 +95,16 @@ function render(panel, pkg, st, onSent) {
           icon("shield"), " La app nunca envía por ti. Cuando cierres la ventana te preguntaremos si la enviaste.") : null,
         confirm))));
 }
+
+/** Abre y rellena el formulario y espera a que cierres el navegador. Devuelve el estado final. */
+export async function fillAndWait(pkgId, onStatus) {
+  await api.post(`/api/packages/${pkgId}/autofill`, {});
+  for (let i = 0; i < 2000; i++) {
+    await new Promise((r) => setTimeout(r, 1500));
+    let st = null;
+    try { st = await api.get(`/api/packages/${pkgId}/autofill`); } catch { /* aún arrancando */ }
+    if (st) onStatus?.(st);
+    if (st && (st.state === "closed" || st.state === "error")) return st;
+  }
+  return { state: "error", message: "Tiempo de espera agotado" };
+}

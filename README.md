@@ -27,6 +27,9 @@ Fuentes ──► duplicados ──► filtros duros ──► criba rápida ─
 - **Descubre empresas**: escribe nombres y encuentra sus portales de Greenhouse, Lever o Ashby (Agente → Dónde busca).
 - **Desde el navegador**: botón «Guardar en JobTracker» para la barra de favoritos (Ajustes → Navegador).
 - **Resumen diario**: notificación cada mañana y tarjeta «Hoy» en la Bandeja.
+- **Busca lo que quieres**: perfil ideal, calibración con 👍/👎, «¿por qué no vi esta oferta?», búsquedas generadas
+  por IA, análisis final con Sonnet y sugerencias semanales para afinar.
+- **Más automático**: aplicar en serie y borradores de seguimiento automáticos en Gmail.
 - **Costa Rica y Latinoamérica**:
   - Workday (multinacionales), SmartRecruiters, Get on Board, Himalayas, Amazon, Recruitee, Breezy y Workable;
   - descarta los remotos «solo EE. UU.»;
@@ -263,6 +266,12 @@ Correo ─Claude─► EmailClassification ─► mueve la tarjeta del Kanban + 
 | GET | `/api/applications/export.csv` | Todas las candidaturas en CSV |
 | GET | `/api/stats` | Resultados: embudo, por fuente, por CV, tiempos, agente |
 | GET | `/api/status/diagnostics` · `/api/status/spend` | Estado de cada pieza · gasto en IA del mes y tope |
+| GET · POST | `/api/agent/calibration` | Ofertas para votar · aprender de los votos (propuesta) |
+| POST | `/api/agent/targeting/apply` | Guarda el perfil ideal y/o las búsquedas |
+| POST | `/api/agent/jobs/{id}/vote` | 👍 / 👎 sobre una oferta |
+| POST | `/api/agent/trace` | «¿Por qué no vi esta oferta?» |
+| POST | `/api/agent/queries/suggest` | Búsquedas propuestas por la IA |
+| GET · POST | `/api/agent/tuning` · `/tuning/apply` | Sugerencias para afinar · aplicar una |
 | GET | `/capture` | Página de destino del botón del navegador (datos en el `#fragmento`) |
 
 ## Próximos pasos sugeridos

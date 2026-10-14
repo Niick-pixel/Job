@@ -11,6 +11,7 @@ from ..models import AnswerBankEntry, Application, ApplicationPackage, Applicati
     MatchResult, PipelineStatus
 from ..schemas import AnswerIn, PackageDecision
 from ..services.llm import LLMClient, LLMError, get_llm
+from ..services import targeting
 from ..services.packages import prepare_package, seed_answer_bank
 from .applications import apply_status
 
@@ -28,6 +29,7 @@ def _package_view(db: Session, pkg: ApplicationPackage) -> dict:
                 "posted_date": job.posted_date, "urgency": job.urgency, "triage_reason": (job.triage or {}).get("reason")},
         "match": ({"score": match.score, **match.result.get("analysis", {})} if match else None),
         "pending_answers": [a["question"] for a in pkg.answers if a.get("answer") is None],
+        "vote": targeting.job_votes(db, [job.id]).get(job.id),
     }
 
 

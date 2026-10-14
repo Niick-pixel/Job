@@ -519,3 +519,29 @@ dialog.sheet.out::backdrop { animation: fade var(--t) var(--ease) reverse both; 
 .spend-meter > i.bad { background: linear-gradient(to right, var(--bad) var(--w), var(--surface-2) var(--w)); }
 .spend-meter small { color: var(--text-3); font-size: 12px; text-align: right; }
 .nav-alert { position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--bad); box-shadow: 0 0 0 2px var(--bg); }
+
+/* ── Afinar la búsqueda (0.9) ───────────────────────────────── */
+
+.ideal-hero { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; padding: 14px 16px; border-radius: var(--radius-sm); background: var(--surface-2); }
+.ideal-hero.empty { background: var(--accent-soft); }
+.chip.check { cursor: pointer; gap: 6px; height: 32px; padding: 0 10px; }
+.chip.check input { accent-color: var(--accent); margin: 0; }
+.tune-row { display: flex; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--border); }
+.tune-row:first-child { border-top: 0; }
+.trace { display: grid; gap: 10px; }
+.trace-step { display: flex; gap: 12px; align-items: flex-start; }
+.votes { display: inline-flex; gap: 2px; white-space: nowrap; }
+.vote { all: unset; cursor: pointer; padding: 3px 5px; border-radius: 6px; opacity: 0.35; filter: grayscale(1); transition: opacity var(--t-fast), transform var(--t-fast), filter var(--t-fast); }
+.vote:hover { opacity: 0.8; filter: none; }
+.vote.on { opacity: 1; filter: none; transform: scale(1.12); }
+dialog.calib { width: min(640px, calc(100vw - 32px)); }
+.calib-progress { height: 4px; border-radius: 99px; background: var(--surface-2); margin: 14px 0 16px; overflow: hidden; }
+.calib-progress i { display: block; height: 100%; width: 0; background: var(--accent); transition: width var(--t-slow) var(--ease-out); }
+.calib-card { padding: 18px 20px; box-shadow: var(--shadow-md); }
+.calib-title { font-size: 18px; font-weight: 650; margin: 4px 0 2px; }
+.calib-snippet { margin-top: 10px; color: var(--text-2); font-size: 13px; max-height: 190px; overflow: hidden; white-space: pre-line;
+  -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent); mask-image: linear-gradient(to bottom, #000 70%, transparent); }
+.calib-actions { display: grid; gap: 10px; margin-top: 14px; }
+.calib-stage { min-height: 280px; }
+.batch { margin-top: 10px; }
+.card.sunken h4 { margin: 0; }

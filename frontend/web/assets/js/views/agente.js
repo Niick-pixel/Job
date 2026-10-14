@@ -1,6 +1,7 @@
 // 🤖 Agente: qué busca, dónde busca, qué ha hecho.
 import { api } from "../api.js";
 import { button, field, fmtDate, h, icon, pageHead, stagger, tagInput, toast, toggle } from "../ui.js";
+import { idealSection, openCalibration, suggestQueries, traceSection, tuningSection, voteButtons } from "../targeting.js";
 import { agentButton, sourceLabel } from "./_shared.js";
 
 const STATUS = {
@@ -15,10 +16,17 @@ export async function render(root, ctx) {
   renderStatus(statusSlot, runs[0]);
 
   const head = pageHead("Agente", "Busca ofertas cada 3 horas, aunque la app esté cerrada",
-    agentButton("Buscar ahora", async (run) => { renderStatus(statusSlot, run); loadFunnel(funnelSlot, ""); ctx.refreshCounts(); }));
+    agentButton("Buscar ahora", async (run) => { renderStatus(statusSlot, run); loadFunnel(funnelSlot, "", ctx); ctx.refreshCounts(); }));
 
-  root.replaceChildren(stagger(h("div", {}, head, statusSlot, preferencesForm(prefs, root, ctx), funnelSection(funnelSlot))));
-  loadFunnel(funnelSlot, "");
+  const reload = () => render(root, ctx);
+  const calibrate = () => openCalibration({ onApplied: reload });
+  const tuneSlot = h("div");
+  root.replaceChildren(stagger(h("div", {}, head, statusSlot, tuneSlot,
+    idealSection(prefs, { onCalibrate: calibrate }),
+    preferencesForm(prefs, root, ctx), traceSection(ctx, { onChanged: reload }), funnelSection(funnelSlot))));
+  loadFunnel(funnelSlot, "", ctx);
+  tuningSection(ctx, { onChanged: reload, onCalibrate: calibrate, onSuggestQueries: () => suggestQueries(reload) })
+    .then((el) => el && tuneSlot.replaceChildren(el));
 }
 
 function renderStatus(slot, run) {
@@ -78,6 +86,9 @@ function preferencesForm(p, root, ctx) {
     amazon: toggle(src.amazon),
     digest: toggle(p.digest_enabled ?? true),
     reminders: toggle(p.interview_reminders ?? true),
+    deep: toggle(!!p.deep_model),
+    deepCap: h("input", { class: "input", type: "number", min: 1, max: 50, value: p.deep_daily_cap ?? 6, style: { width: "80px" } }),
+    followups: toggle(p.auto_followup_drafts ?? true),
     digestHour: h("select", { class: "input", style: { width: "auto" } },
       Array.from({ length: 24 }, (_, i) => h("option", { value: i, selected: i === (p.digest_hour ?? 9) }, `${String(i).padStart(2, "0")}:00`))),
   };
@@ -92,6 +103,8 @@ function preferencesForm(p, root, ctx) {
     deep_match_top_n: Number(f.topN.value) || 10,
     digest_enabled: f.digest.input.checked, digest_hour: Number(f.digestHour.value),
     interview_reminders: f.reminders.input.checked, country: f.countrySel.value || null,
+    deep_model: f.deep.input.checked ? "claude-sonnet-5-5" : null, deep_daily_cap: Number(f.deepCap.value) || 6,
+    auto_followup_drafts: f.followups.input.checked,
     sources: { ...src, greenhouse: f.greenhouse.value, lever: f.lever.value, ashby: f.ashby.value,
       remotive_queries: f.remotive.value, adzuna_queries: f.adzuna.value,
       adzuna_country: (f.country.value || "es").toLowerCase(), email_alerts: f.alerts.input.checked,
@@ -116,6 +129,9 @@ function preferencesForm(p, root, ctx) {
       row("Resumen diario", "Un aviso cada mañana con entrevistas, candidaturas nuevas y seguimientos pendientes",
         h("div", { class: "row", style: { flexWrap: "nowrap" } }, f.digestHour, f.digest)),
       row("Aviso antes de cada entrevista", "La víspera a partir de las 18:00 (o el mismo día si la apuntas tarde)", f.reminders),
+      row("Análisis final con Claude Sonnet", "Mejor criterio para decidir qué llega a tu Bandeja. Solo las mejores del día (≈ 0,01 $ cada una); el resto, con el modelo normal",
+        h("div", { class: "row", style: { flexWrap: "nowrap" } }, f.deepCap, h("span", { class: "faint small" }, "al día"), f.deep)),
+      row("Borradores de seguimiento automáticos", "Si una empresa no contesta en 7 días, deja el correo listo en Gmail (dentro del hilo). Nunca lo envía", f.followups),
       h("hr", { class: "divider", style: { margin: "4px 0" } }),
       h("div", { class: "grid-2" },
         field("Puestos objetivo", f.titles, "Vacío = deja que la IA decida con tu CV"),
@@ -128,8 +144,11 @@ function preferencesForm(p, root, ctx) {
         field("Umbral de criba rápida", f.triage, "Por debajo, la IA la descarta sin gastar más"),
         field("Umbral para preparar candidatura", f.prepare, "A partir de aquí llega a tu Bandeja"))),
 
-    h("h2", { class: "section-title" }, "Dónde busca"),
+    h("h2", { class: "section-title", id: "sec-donde" }, "Dónde busca"),
     h("section", { class: "card stack" },
+      h("div", { class: "row between" },
+        h("p", { class: "muted small", style: { flex: "1 1 260px" } }, "¿Las búsquedas no traen lo que quieres? La IA las genera a partir de tu CV y de lo que buscas."),
+        button("Generar búsquedas con IA", { size: "sm", ico: "sparkles", onClick: () => suggestQueries(() => render(root, ctx)) })),
       h("div", { class: "row between" },
         h("div", { style: { flex: "1 1 260px", minWidth: 0 } }, h("p", { style: { fontWeight: 600 } }, "Tu país"),
           h("p", { class: "faint small" }, "Descarta remotos que solo contratan en otros países y adapta salarios, aguinaldo y tono de los correos.")),
@@ -219,22 +238,39 @@ function funnelSection(slot) {
   return h("div", {}, h("h2", { class: "section-title" }, "Ofertas descubiertas"), slot);
 }
 
-async function loadFunnel(slot, status) {
+async function loadFunnel(slot, status, ctx) {
   const jobs = await api.get("/api/agent/jobs", { status });
   const filters = h("div", { class: "row", style: { justifyContent: "center", gap: "6px", marginBottom: "14px" } },
     Object.entries(STATUS).map(([id, label]) => h("button", {
       class: `chip ${id === status ? "accent" : ""}`, type: "button", style: { cursor: "pointer" },
-      onClick: () => loadFunnel(slot, id),
+      onClick: () => loadFunnel(slot, id, ctx),
     }, label)));
   const body = jobs.length
     ? h("section", { class: "card flat", style: { padding: "4px 8px", overflowX: "auto" } }, h("table", { class: "table" },
-      h("thead", {}, h("tr", {}, ["Puesto", "Fuente", "Encaje", "Motivo"].map((t) => h("th", {}, t)))),
+      h("thead", {}, h("tr", {}, ["Puesto", "Fuente", "Encaje", "Motivo", ""].map((t) => h("th", {}, t)))),
       h("tbody", {}, jobs.map((j) => h("tr", {},
         h("td", {}, j.url ? h("a", { href: j.url, target: "_blank", rel: "noopener" }, j.title) : j.title,
           h("div", { class: "faint small" }, [j.company, j.location].filter(Boolean).join(" · "))),
         h("td", { class: "small" }, sourceLabel(j.source)),
         h("td", {}, j.score != null ? h("span", { class: "chip" }, `${Math.round(j.score)}`) : ""),
-        h("td", { class: "small muted", style: { maxWidth: "320px" } }, j.reason || STATUS[j.status] || j.status))))))
+        h("td", { class: "small muted", style: { maxWidth: "320px" } }, j.reason || STATUS[j.status] || j.status),
+        h("td", {}, voteButtons(j.id, j.vote, { onPrepare: () => offerPrepare(j, ctx) })))))))
     : h("p", { class: "center faint", style: { padding: "20px" } }, "Nada por aquí todavía.");
   slot.replaceChildren(filters, body);
+}
+
+
+function offerPrepare(j, ctx) {
+  const t = h("div", { class: "toast", role: "status", style: { pointerEvents: "auto" } },
+    h("span", {}, `¿Preparo «${j.title}» aunque el agente la descartó?`),
+    button("Preparar", { size: "sm", kind: "primary", onClick: async () => {
+      if (!ctx?.cv) throw new Error("Sube primero tu CV");
+      await api.post(`/api/jobs/${j.id}/prepare`, null, { cv_id: ctx.cv.id });
+      t.remove();
+      toast("Lista en tu Bandeja");
+      ctx.refreshCounts();
+    } }),
+    button("", { size: "sm", kind: "ghost", ico: "x", onClick: () => t.remove() }));
+  document.getElementById("toasts").append(t);
+  setTimeout(() => t.remove(), 9000);
 }

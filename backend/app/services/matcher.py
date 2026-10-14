@@ -51,7 +51,8 @@ def skills_coverage(cv: CVExtraction, job: JobExtraction) -> tuple[float, list[s
 
 
 def evaluate_match(
-    llm: LLMClient, cv: CVExtraction, job: JobExtraction, cv_text: str, llm_weight: float = 0.7
+    llm: LLMClient, cv: CVExtraction, job: JobExtraction, cv_text: str, llm_weight: float = 0.7,
+    preferences: str = "", model: str | None = None,
 ) -> tuple[float, float, MatchAnalysis]:
     """Devuelve (score combinado 0-100, cobertura 0-1, análisis de la IA)."""
     coverage, covered, missing = skills_coverage(cv, job)
@@ -62,10 +63,14 @@ def evaluate_match(
         "<cobertura_automatica>\n"
         + json.dumps({"cubiertos": covered, "no_encontrados_literalmente": missing}, ensure_ascii=False)
         + "\n</cobertura_automatica>\n\n"
-        "La cobertura automática es literal: revisa si los 'no encontrados' están cubiertos "
+        + (f"<lo_que_busca_el_candidato>\n{preferences}\n</lo_que_busca_el_candidato>\n\n" if preferences else "")
+        + "La cobertura automática es literal: revisa si los 'no encontrados' están cubiertos "
         "con otro nombre o con experiencia equivalente. Evalúa la compatibilidad."
+        + (" Ten en cuenta también lo que busca: si la oferta choca con algo que lo descarta (salario, modalidad, "
+           "tipo de puesto…), dilo en las brechas y baja el score." if preferences else "")
     )
-    analysis = llm.structured(system=MATCH_SYSTEM, prompt=prompt, schema=MatchAnalysis)
+    kwargs = {"model": model} if model else {}
+    analysis = llm.structured(system=MATCH_SYSTEM, prompt=prompt, schema=MatchAnalysis, **kwargs)
     llm_score = max(0, min(100, analysis.score))
     combined = round(llm_weight * llm_score + (1 - llm_weight) * coverage * 100, 1)
     return combined, coverage, analysis

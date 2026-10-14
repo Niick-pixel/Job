@@ -1,7 +1,8 @@
 // 📥 Bandeja: candidaturas preparadas por el agente, listas para aprobar.
 import { api } from "../api.js";
 import { animateOut, button, empty, fmtDate, h, icon, list, pageHead, ring, skeletons, stagger, toast, urgencyChip } from "../ui.js";
-import { autofillButton } from "../autofill.js";
+import { autofillButton, fillAndWait } from "../autofill.js";
+import { voteButtons } from "../targeting.js";
 import { openApplication } from "../detail.js";
 import { agentButton, linkButton, setupBanner, sourceLabel } from "./_shared.js";
 
@@ -16,10 +17,11 @@ export async function render(root, ctx) {
   const approvedSlot = h("div");
   root.replaceChildren(head, skeletons(2));
 
-  const [pending, approved, banner, digest] = await Promise.all([
+  const [pending, approved, banner, digest, tuning] = await Promise.all([
     ctx.refreshCounts(), api.get("/api/packages", { status: "aprobada" }), setupBanner(ctx),
-    api.get("/api/agent/digest").catch(() => null),
+    api.get("/api/agent/digest").catch(() => null), api.get("/api/agent/tuning").catch(() => null),
   ]);
+  if (digest) digest.tuning = tuning?.suggestions || [];
 
   const setSubtitle = () => {
     const n = list_.children.length;
@@ -36,7 +38,7 @@ export async function render(root, ctx) {
 
 /** Tarjeta «Hoy»: entrevistas próximas y candidaturas que necesitan seguimiento. */
 function todayCard(d, ctx, reload) {
-  if (!d || (!d.interviews.length && !d.stale.length && !d.approved_unsent)) return null;
+  if (!d || (!d.interviews.length && !d.stale.length && !d.approved_unsent && !d.tuning?.length)) return null;
   const when = (iso) => new Date(iso).toLocaleString("es-ES", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
   const item = (ico, kind, main, sub, action) => h("button", {
     type: "button", class: "btn ghost", style: { width: "100%", justifyContent: "flex-start", height: "auto", padding: "8px 10px", textAlign: "left", whiteSpace: "normal" },
@@ -49,7 +51,9 @@ function todayCard(d, ctx, reload) {
       () => openApplication(i.application_id, { focus: "prep", onChange: reload }))),
     d.approved_unsent ? item("send", "accent", `${d.approved_unsent} aprobada${d.approved_unsent > 1 ? "s" : ""} sin enviar`, "abajo en esta página", "bandeja") : null,
     d.stale.slice(0, 3).map((s) => item("clock", "", `Sin respuesta · ${s.company || s.title}`, `hace ${s.days} días: buen momento para un seguimiento`,
-      () => openApplication(s.application_id, { focus: "seguimiento", onChange: reload }))));
+      () => openApplication(s.application_id, { focus: "seguimiento", onChange: reload }))),
+    d.tuning?.length ? item("sparkles", "accent", `${d.tuning.length} sugerencia${d.tuning.length > 1 ? "s" : ""} para afinar tu búsqueda`,
+      d.tuning[0].text, "agente") : null);
 }
 
 function emptyState(ctx) {
@@ -80,7 +84,8 @@ function packageCard(pkg, ctx, onGone) {
       h("p", { class: "card-sub" }, [job.company, job.location].filter(Boolean).join(" · ")),
       h("div", { class: "row", style: { marginTop: "10px", gap: "6px" } },
         urgencyChip(job.urgency?.level), h("span", { class: "chip" }, sourceLabel(job.source)),
-        job.posted_date ? h("span", { class: "chip" }, icon("clock"), fmtDate(job.posted_date)) : null)));
+        job.posted_date ? h("span", { class: "chip" }, icon("clock"), fmtDate(job.posted_date)) : null)),
+    h("div", { title: "Enséñale al agente: más como esta / menos como esta" }, voteButtons(job.id, pkg.vote)));
 
   const summary = match.summary ? h("p", { class: "muted", style: { marginTop: "14px" } }, match.summary) : null;
   const fit = (match.strengths?.length || match.gaps?.length) ? h("div", { class: "grid-2", style: { marginTop: "16px" } },
@@ -154,5 +159,49 @@ function renderApproved(slot, approved) {
     rows.append(wrap);
   }
   rows.lastElementChild.style.borderBottom = "0";
-  slot.replaceChildren(h("h2", { class: "section-title" }, "Aprobadas · pendientes de enviar"), rows);
+  const fillable = approved.filter((p) => p.job.apply_url);
+  const batch = fillable.length >= 2 ? batchApply(fillable, rows) : null;
+  slot.replaceChildren(h("h2", { class: "section-title" }, "Aprobadas · pendientes de enviar"), batch || "", rows);
+}
+
+/** «Aplicar en serie»: abre y rellena los formularios uno tras otro; tú revisas y envías cada uno. */
+function batchApply(pkgs, rows) {
+  const panel = h("div", { class: "card sunken batch", hidden: true });
+  const start = button(`Aplicar en serie (${pkgs.length})`, { kind: "primary", ico: "sparkles",
+    title: "Abre cada formulario ya relleno; tú revisas y pulsas «Enviar» en cada uno", onClick: async () => {
+      start.hidden = true;
+      panel.hidden = false;
+      let sent = 0;
+      for (const [n, pkg] of pkgs.entries()) {
+        const msg = h("p", { class: "muted small" }, "Abriendo el navegador…");
+        panel.replaceChildren(h("p", { style: { fontWeight: 600 } }, `${n + 1} de ${pkgs.length} · ${pkg.job.title} — ${pkg.job.company || ""}`), msg);
+        let st;
+        try {
+          st = await fillAndWait(pkg.id, (s) => {
+            msg.textContent = s.state === "ready" ? `Rellenados ${s.filled?.length || 0} campos${s.missing?.length ? ` · faltan ${s.missing.length} (en naranja)` : ""}. Revisa y pulsa «Enviar» en el navegador; luego ciérralo.` : (s.message || "…");
+          });
+        } catch (err) {
+          panel.replaceChildren(h("p", {}, err.status === 412 ? "Hace falta Google Chrome: usa «Rellenar formulario» en una candidatura para instalarlo." : err.message));
+          return;
+        }
+        const answer = await new Promise((resolve) => {
+          panel.replaceChildren(h("p", { style: { fontWeight: 600 } }, `${pkg.job.title} — ${pkg.job.company || ""}`),
+            h("p", { class: "muted small" }, st.state === "error" ? `No se pudo rellenar: ${st.message}` : st.submitted ? "Parece que la enviaste." : "¿La enviaste?"),
+            h("div", { class: "row" },
+              button("Sí, enviada", { kind: "primary", size: "sm", ico: "send", onClick: () => resolve("sent") }),
+              button("No, siguiente", { size: "sm", onClick: () => resolve("skip") }),
+              button("Parar", { kind: "ghost", size: "sm", onClick: () => resolve("stop") })));
+        });
+        if (answer === "stop") break;
+        if (answer === "sent") {
+          await api.post(`/api/packages/${pkg.id}/decision`, { decision: "enviada" });
+          sent++;
+          const row = [...rows.children].find((r) => r.textContent.includes(pkg.job.title));
+          if (row) await animateOut(row);
+        }
+      }
+      panel.replaceChildren(h("p", {}, icon("check"), ` Listo: ${sent} candidatura${sent === 1 ? "" : "s"} enviada${sent === 1 ? "" : "s"}.`));
+      start.hidden = false;
+    } });
+  return h("div", { style: { marginBottom: "12px" } }, h("div", { class: "row", style: { justifyContent: "center" } }, start), panel);
 }

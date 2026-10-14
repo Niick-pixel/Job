@@ -14,6 +14,7 @@ from .config import DATA_DIR
 from .database import engine, init_db
 from .services.agent import load_preferences
 from .services.digest import build_digest, digest_message, due_reminders, reminder_message
+from .services.tuning import suggestions
 from .services.notify import notify
 
 STATE = DATA_DIR / "digest.json"
@@ -61,12 +62,43 @@ def main(argv: list[str] | None = None) -> int:
         now = datetime.now()  # hora local del Mac
         if not force and (not prefs.digest_enabled or not should_send(now, prefs.digest_hour, _last_sent())):
             return 0
+        send_followup_drafts(db, prefs)
         msg = digest_message(build_digest(db))
+        tuning = weekly_tuning_message(db, prefs, now)
     if msg:
         notify(*msg)
         print(f"[resumen] {msg[1]}")
+    if tuning:
+        notify("JobTracker AI · afina tu búsqueda", tuning)
+        _save(tuning_week=now.strftime("%G-W%V"))
     _save(last_sent=date.today().isoformat())
     return 0
+
+
+def send_followup_drafts(db, prefs) -> list[str]:
+    """Borradores de seguimiento en Gmail (una vez al día, con el resumen). Nunca rompe el resumen."""
+    from .config import get_settings
+    from .services.followups import create_followup_drafts
+    from .services.llm import get_llm
+
+    try:
+        done = create_followup_drafts(db, get_llm(), get_settings(), prefs)
+    except Exception as e:  # noqa: BLE001
+        print(f"[seguimientos] no se pudieron crear: {e}")
+        return []
+    if done:
+        notify("✉️ Borradores de seguimiento en Gmail", f"{', '.join(done)} · revísalos y envíalos desde Gmail")
+    return done
+
+
+def weekly_tuning_message(db, prefs, now: datetime) -> str | None:
+    """Una vez por semana: cuántas sugerencias hay para afinar la búsqueda."""
+    if _state().get("tuning_week") == now.strftime("%G-W%V"):
+        return None
+    items = [s for s in suggestions(db, prefs) if s["id"] != "calibrate" or now.weekday() == 0]
+    if not items:
+        return None
+    return f"{len(items)} sugerencia{'s' if len(items) > 1 else ''} para mejorar tus resultados: {items[0]['text']} (Agente → Afinar)"
 
 
 if __name__ == "__main__":

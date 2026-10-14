@@ -28,6 +28,7 @@ from .matcher import evaluate_match
 from .notify import notify
 from .region import LATAM, country_info, guess_country, remote_restriction
 from .stats import source_weights
+from .targeting import deep_model_for_today, feedback_examples, ideal_text
 from .usage import budget_notice, over_budget
 from .sources import RawJob, collect, extract_alert_jobs, is_job_alert, page_text
 from .urgency import assess_urgency
@@ -35,9 +36,12 @@ from .urgency import assess_urgency
 TRIAGE_BATCH = 8
 
 TRIAGE_SYSTEM = """Eres un reclutador que hace una primera criba rápida de ofertas para UN candidato concreto.
-Para cada oferta da un score 0-100 de encaje real (rol, seniority, stack, ubicación/modalidad y
-las preferencias del candidato) y una frase de motivo. Sé exigente: 80+ solo si encaja de verdad.
-Las decisiones anteriores del candidato muestran qué le interesa y qué no: respétalas."""
+Para cada oferta da un score 0-100 y una frase de motivo. El score mide si es una oferta que el candidato
+QUERRÍA, no solo si podría hacerla:
+- Lo que busca (puestos, nivel, salario, modalidad, sector, imprescindibles) y lo que lo descarta pesan tanto
+  como el encaje con su CV. Si choca con algo que lo descarta, el score no pasa de 40.
+- Sus votos son la mejor señal: puntúa alto lo parecido a lo que le interesa y bajo lo parecido a lo que no.
+- Sé exigente: 80+ solo si encaja de verdad con su CV Y con lo que busca."""
 
 
 # ── Preferencias ────────────────────────────────────────────────
@@ -143,6 +147,8 @@ def hard_filter(job: RawJob, prefs: SearchPreferences, today: date | None = None
         return "el título no coincide con tus puestos objetivo"
     if hit := _contains_any(f"{job.title}\n{job.description[:4000]}", prefs.exclude_keywords):
         return f"contiene «{hit}»"
+    if hit := _contains_any(job.title, prefs.ideal.roles_avoid):
+        return f"es un puesto que no buscas («{hit}»)"
     if prefs.remote_only and job.remote is not True:
         return "no es remota"
     if job.remote and prefs.country and (only := remote_restriction(job.location, job.description, prefs.country)):
@@ -159,17 +165,15 @@ def hard_filter(job: RawJob, prefs: SearchPreferences, today: date | None = None
 # ── Criba con IA ────────────────────────────────────────────────
 
 
-def _triage_system(cv: CVExtraction, prefs: SearchPreferences, feedback: list[Feedback]) -> str:
-    """Prefijo estable de la criba (se cachea): instrucciones + perfil + preferencias + decisiones."""
-    fb = "\n".join(
-        f"- {f.decision.upper()}: {f.title} @ {f.company or '?'}" + (f" — motivo: {f.reason}" if f.reason else "")
-        for f in feedback
-    ) or "(todavía ninguna)"
+def _triage_system(cv: CVExtraction, prefs: SearchPreferences, examples: str) -> str:
+    """Prefijo estable de la criba (se cachea): instrucciones + perfil + lo que busca + sus votos."""
     prefs_txt = prefs.model_dump_json(include={"target_titles", "exclude_keywords", "locations", "remote_ok",
-                                               "remote_only", "min_salary"})
+                                               "remote_only", "min_salary", "country"})
+    ideal = ideal_text(prefs)
     return (
         f"{TRIAGE_SYSTEM}\n\n<perfil_candidato>\n{cv.model_dump_json(indent=1)}\n</perfil_candidato>\n\n"
-        f"<preferencias>\n{prefs_txt}\n</preferencias>\n\n<decisiones_anteriores>\n{fb}\n</decisiones_anteriores>"
+        + (f"<lo_que_busca>\n{ideal}\n</lo_que_busca>\n\n" if ideal else "")
+        + f"<preferencias>\n{prefs_txt}\n</preferencias>\n\n<sus_votos_y_decisiones>\n{examples}\n</sus_votos_y_decisiones>"
     )
 
 
@@ -278,8 +282,7 @@ def run_agent(
         pending = [j for j in db.exec(select(Job).where(Job.pipeline_status == PipelineStatus.CANDIDATE.value)).all()
                    if "score" not in (j.triage or {})][: prefs.max_triage_per_run]
         if pending:
-            feedback = db.exec(select(Feedback).order_by(Feedback.created_at.desc()).limit(30)).all()
-            scores = triage_jobs(llm, settings, _triage_system(cv, prefs, feedback), pending)
+            scores = triage_jobs(llm, settings, _triage_system(cv, prefs, feedback_examples(db)), pending)
             for job in pending:
                 if job.id not in scores:
                     continue
@@ -338,7 +341,8 @@ def _deep_analyze(db, llm, settings, job: Job, cv_row: CVProfile, cv: CVExtracti
     job.location = details.location or job.location
     job.posted_date = job.posted_date or details.posted_date
     job.urgency = assess_urgency(job.posted_date, details.applicants_count).model_dump()
-    score, coverage, analysis = evaluate_match(llm, cv, details, cv_row.raw_text, settings.match_llm_weight)
+    score, coverage, analysis = evaluate_match(llm, cv, details, cv_row.raw_text, settings.match_llm_weight,
+                                               preferences=ideal_text(prefs), model=deep_model_for_today(db, prefs))
     db.add(MatchResult(cv_id=cv_row.id, job_id=job.id, score=score,
                        result={"llm_score": analysis.score, "skills_coverage": coverage, "analysis": analysis.model_dump()}))
     job.triage = {**job.triage, "match_score": score}

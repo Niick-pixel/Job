@@ -304,6 +304,25 @@ class SourcesConfig(BaseModel):
     amazon: bool = False
 
 
+class IdealProfile(BaseModel):
+    """Lo que el candidato QUIERE (no solo lo que puede hacer según su CV). Lo usan la criba y el análisis."""
+    roles_wanted: list[str] = Field(default_factory=list, description="Puestos que busca, p. ej. 'Backend Engineer'")
+    roles_avoid: list[str] = Field(default_factory=list, description="Puestos que NO quiere (se filtran por título)")
+    seniority: list[str] = Field(default_factory=list, description="junior, mid, senior, lead…")
+    min_monthly_salary: float | None = Field(None, ge=0, description="Salario bruto mensual mínimo")
+    salary_currency: str = "USD"
+    modalities: list[str] = Field(default_factory=list, description="remoto, híbrido, presencial (vacío = cualquiera)")
+    industries_like: list[str] = Field(default_factory=list)
+    industries_avoid: list[str] = Field(default_factory=list)
+    must_haves: list[str] = Field(default_factory=list, description="Imprescindibles, p. ej. 'inglés en el día a día'")
+    deal_breakers: list[str] = Field(default_factory=list, description="Lo que descarta una oferta, p. ej. 'turnos de noche'")
+    notes: str = Field("", max_length=2000, description="Lo que quiera añadir en sus palabras")
+
+    def is_empty(self) -> bool:
+        return not any([self.roles_wanted, self.roles_avoid, self.seniority, self.min_monthly_salary, self.modalities,
+                        self.industries_like, self.industries_avoid, self.must_haves, self.deal_breakers, self.notes.strip()])
+
+
 class SearchPreferences(BaseModel):
     enabled: bool = True
     target_titles: list[str] = Field(default_factory=list, description="El título debe contener alguno (vacío = todos)")
@@ -323,6 +342,10 @@ class SearchPreferences(BaseModel):
     interview_reminders: bool = True
     country: str | None = Field(None, description="ISO de 2 letras de tu país (p. ej. CR): filtra remotos y adapta salarios")
     region_checked: bool = False  # 0.8.0: se dedujo una vez el país del CV en instalaciones ya configuradas
+    ideal: IdealProfile = Field(default_factory=IdealProfile)
+    deep_model: str | None = Field("claude-sonnet-5-5", description="Modelo para el análisis final (None = el del perfil de gasto)")
+    deep_daily_cap: int = Field(6, ge=0, le=50, description="Análisis finales al día con ese modelo; el resto, con el normal")
+    auto_followup_drafts: bool = True
     monthly_budget_usd: float | None = Field(None, ge=0, le=1000,
                                              description="Tope de gasto en IA al mes: al alcanzarlo el agente se pausa")
     sources: SourcesConfig = Field(default_factory=SourcesConfig)
@@ -386,3 +409,40 @@ class AnswerIn(BaseModel):
     key: str
     question: str
     answer: str = ""
+
+
+# ── Afinar la búsqueda (0.9.0) ──────────────────────────────────
+
+
+class QueriesProposal(BaseModel):
+    getonbrd: list[str] = Field(description="2-4 búsquedas cortas para Get on Board (tecnología, LatAm); vacío si no aplica")
+    remotive: list[str] = Field(description="1-3 búsquedas cortas en inglés para un portal de empleo remoto")
+    adzuna: list[str] = Field(description="1-3 títulos de puesto en el idioma del país del candidato")
+    explanation: str = Field(description="Una frase: por qué estas búsquedas")
+
+
+class CalibrationVote(BaseModel):
+    job_id: int
+    vote: Literal["like", "dislike", "skip"]
+    reason: str | None = Field(None, max_length=200)
+
+
+class CalibrationIn(BaseModel):
+    votes: list[CalibrationVote] = Field(max_length=40)
+    notes: str = Field("", max_length=2000)
+
+
+class CalibrationOut(BaseModel):
+    ideal: IdealProfile
+    learned: list[str] = Field(description="3-6 frases: qué has aprendido de sus votos (en segunda persona)")
+    queries: QueriesProposal
+
+
+class VoteIn(BaseModel):
+    vote: Literal["like", "dislike"]
+    reason: str | None = Field(None, max_length=200)
+
+
+class TraceIn(BaseModel):
+    url: str | None = Field(None, max_length=2000)
+    text: str | None = Field(None, max_length=40_000)
