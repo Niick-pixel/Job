@@ -135,4 +135,4 @@ bold "✅ Listo"
 echo "  • Abre «JobTracker AI» desde ~/Applications (o Spotlight)"
 echo "  • CLI: ~/.local/bin/jobtracker status | update | rollback | logs | uninstall"
 case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) echo "  • Añade ~/.local/bin a tu PATH:  echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.zshrc" ;; esac
-echo "  • Las actualizaciones se comprueban solas cada 6 h (jobtracker config auto-update off para desactivarlo)"
+echo "  • Las actualizaciones se comprueban solas cada hora y al abrir la app (jobtracker config auto-update off para desactivarlo)"

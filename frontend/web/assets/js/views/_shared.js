@@ -35,7 +35,7 @@ export async function setupBanner(ctx) {
   const [keys] = await Promise.all([api.get("/api/settings/keys").catch(() => null), ctx.refreshCv()]);
   const claude = keys?.keys.find((k) => k.name === "ANTHROPIC_API_KEY");
   const steps = [];
-  if (!claude?.configured) steps.push(["key", "Añade tu clave de Claude", "ajustes"]);
+  if (!claude?.configured) steps.push(["key", "Añade tu clave de Claude", "ajustes/claves"]);
   if (!ctx.cv) steps.push(["upload", "Sube tu CV", "perfil"]);
   if (!steps.length) return null;
   return h("div", { class: "card sunken", style: { marginBottom: "20px" } },

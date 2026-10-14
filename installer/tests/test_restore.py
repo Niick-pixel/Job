@@ -34,3 +34,16 @@ def test_restore_db(tmp_path, monkeypatch, capsys):
 def test_restore_db_without_backups(tmp_path, monkeypatch):
     monkeypatch.setenv("JOBTRACKER_HOME", str(tmp_path / "app"))
     assert jt.main(["restore-db", "--yes"]) == 1
+
+
+def test_reload_updater(tmp_path, monkeypatch):
+    home = tmp_path / "app"
+    monkeypatch.setenv("JOBTRACKER_HOME", str(home))
+    monkeypatch.setenv("JOBTRACKER_ALLOW_NON_MAC", "1")
+    monkeypatch.setenv("JOBTRACKER_WRITE_PLISTS", "1")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    home.mkdir(parents=True)
+    (home / "state.json").write_text('{"current": "0.9.1", "python": "/usr/bin/python3"}')
+    (home / "current").mkdir()
+    assert jt.main(["reload-updater"]) == 0
+    assert (home / ".updater_interval").read_text() == str(jt.CHECK_INTERVAL_SECONDS) == "3600"

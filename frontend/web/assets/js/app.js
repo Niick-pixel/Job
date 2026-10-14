@@ -2,6 +2,7 @@
 import { api } from "./api.js";
 import { $, button, h, icon, softly, toast } from "./ui.js";
 import { THEMES, setTheme } from "./theme.js";
+import { checkNow, isStale, maybeShowWhatsNew, showUpdateButton } from "./updates.js";
 
 export const ROUTES = [
   { id: "bandeja", label: "Bandeja", ico: "inbox" },
@@ -122,22 +123,19 @@ addEventListener("keydown", (e) => {
 });
 
 async function checkUpdate() {
-  const info = await api.get("/api/system/version").catch(() => null);
+  let info = await api.get("/api/system/version").catch(() => null);
   if (!info) return;
   window.APP_VERSION = info.version;
-  const slot = $("#update-slot");
-  slot.replaceChildren();
-  if (info.update_available) {
-    slot.append(button(`Actualizar a ${info.latest}`, {
-      kind: "primary", size: "sm", ico: "arrowUp",
-      onClick: async () => { await api.post("/api/system/update"); toast("Actualizando… la app se reiniciará sola"); },
-    }));
-  }
+  maybeShowWhatsNew(info.version);
+  // Al abrir la app: si hace más de una hora que no se comprueba, se comprueba ya (sin esperar al actualizador)
+  if (isStale(info)) info = await checkNow().catch(() => info);
+  showUpdateButton(info);
 }
 
 // ── Arranque ─────────────────────────────────────────────────────
 buildNav();
 addEventListener("hashchange", route);
+
 /** Punto rojo en Ajustes si el diagnóstico encuentra algo roto (clave, CV, agente…). */
 async function checkHealth() {
   const d = await api.get("/api/status/diagnostics").catch(() => null);
@@ -151,5 +149,6 @@ async function checkHealth() {
 
 await Promise.all([ctx.refreshCv(), ctx.refreshCounts(), checkUpdate(), checkHealth()]);
 setInterval(checkHealth, 10 * 60 * 1000);
+setInterval(checkUpdate, 60 * 60 * 1000);  // con la app abierta mucho rato, también se entera
 route();
 setInterval(() => ctx.refreshCounts(), 60_000);

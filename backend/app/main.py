@@ -25,6 +25,7 @@ async def lifespan(_: FastAPI):
     moved = settings.migrate_to_keychain(settings.secret_names())
     if moved:
         print(f"[llavero] claves pasadas al Llavero de macOS: {', '.join(moved)}")
+    system.maybe_reload_updater()
     if settings.migrate_cost_profile():
         print("[ajustes] instalación pasada al perfil económico (Claude Haiku)")
     yield

@@ -2,6 +2,22 @@
 
 Las notas de cada versión se muestran dentro de la app al ofrecer la actualización.
 
+## 0.9.1 — calidad de vida
+
+- **Buscar actualizaciones cuando quieras**: botón en Ajustes → Actualizaciones. Además, la app comprueba
+  sola **al abrirse** (si hace más de una hora) y **cada hora** en segundo plano, en lugar de cada 6 horas.
+- **Actualizar sin perderte**: pantalla de progreso mientras se instala. La app se recarga sola con la
+  versión nueva; si algo falla, vuelve a la anterior y te lo dice.
+- **Novedades**: después de cada actualización verás qué ha cambiado (también en Ajustes → Actualizaciones).
+- **Ajustes ordenados en pestañas**:
+  - **General**: estado y apariencia.
+  - **IA y gasto**.
+  - **Claves API**.
+  - **Conexiones**: Gmail y navegador.
+  - **Actualizaciones**: incluye activar o desactivar la actualización automática.
+  - **Tus datos**: copias de seguridad, hacer una ahora, exportar a CSV y abrir la carpeta.
+  Los botones del panel de Estado llevan directamente a la pestaña correcta.
+
 ## 0.9.0 — resultados más precisos y más automatización
 
 **Que el agente busque lo que tú quieres** (Agente)

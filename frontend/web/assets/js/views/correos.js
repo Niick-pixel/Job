@@ -21,7 +21,7 @@ export async function render(root, ctx) {
         await load(listSlot, ctx);
       },
     }),
-    gmail.mode !== "gmail" ? button("Conectar Gmail", { ico: "link", onClick: () => ctx.go("ajustes") }) : null);
+    gmail.mode !== "gmail" ? button("Conectar Gmail", { ico: "link", onClick: () => ctx.go("ajustes/conexiones") }) : null);
   root.replaceChildren(head, listSlot);
   await load(listSlot, ctx);
 }

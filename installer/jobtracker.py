@@ -47,7 +47,7 @@ APP_NAME = "JobTracker AI"
 LABEL_PREFIX = "com.jobtrackerai"
 DEFAULT_MANIFEST_URL = "https://github.com/Niick-pixel/Job/releases/latest/download/manifest.json"
 BACKEND_PORT = 8000
-CHECK_INTERVAL_SECONDS = 6 * 3600
+CHECK_INTERVAL_SECONDS = 3600  # comprobar es barato (un manifiesto firmado); además la app comprueba al abrirse
 AGENT_INTERVAL_SECONDS = 3 * 3600
 DIGEST_INTERVAL_SECONDS = 3600  # comprueba cada hora; el resumen se envía una vez al día a la hora elegida
 KEEP_VERSIONS = 2
@@ -778,7 +778,7 @@ def cmd_update(_args, paths: Paths) -> None:
 
 
 def cmd_auto_update(_args, paths: Paths) -> None:
-    """Lo ejecuta launchd cada 6 h (y cuando la interfaz pide «Actualizar ahora»)."""
+    """Lo ejecuta launchd cada hora (y cuando la interfaz pide «Actualizar ahora»)."""
     state = require_installed(paths)
     forced = paths.force_flag.exists()
     paths.force_flag.unlink(missing_ok=True)
@@ -792,6 +792,19 @@ def cmd_auto_update(_args, paths: Paths) -> None:
         log(f"Actualización automática fallida: {e}")
         if forced:
             notify(APP_NAME, f"No se pudo actualizar: {e}")
+
+
+def cmd_reload_updater(_args, paths: Paths) -> None:
+    """Recarga el actualizador para que launchd lea su plist nuevo (p. ej. otro intervalo).
+    Nunca durante una actualización: el propio actualizador estaría ejecutándose."""
+    state = require_installed(paths)
+    with update_lock(paths):
+        services = Services(paths, state)
+        services.write_plists()
+        services.unload("updater")
+        services.load("updater")
+    (paths.home / ".updater_interval").write_text(str(CHECK_INTERVAL_SECONDS))
+    print(f"Actualizador recargado (cada {CHECK_INTERVAL_SECONDS // 60} min)")
 
 
 def cmd_rollback(_args, paths: Paths) -> None:
@@ -927,6 +940,7 @@ def build_parser() -> argparse.ArgumentParser:
         ("auto-update", cmd_auto_update, "(interno) tarea periódica de launchd"),
         ("rollback", cmd_rollback, "vuelve a la versión anterior"),
         ("refresh", cmd_refresh, "(interno) regenera .app, CLI y LaunchAgents"),
+        ("reload-updater", cmd_reload_updater, "(interno) recarga el actualizador con su configuración nueva"),
         ("version", cmd_version, "muestra la versión instalada"),
     ]:
         sub.add_parser(name, help=help_).set_defaults(func=func)

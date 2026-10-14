@@ -545,3 +545,31 @@ dialog.calib { width: min(640px, calc(100vw - 32px)); }
 .calib-stage { min-height: 280px; }
 .batch { margin-top: 10px; }
 .card.sunken h4 { margin: 0; }
+
+/* ── Ajustes por pestañas y actualizaciones (0.9.1) ────────── */
+
+.tabs { display: flex; gap: 4px; padding: 4px; margin: 0 auto 22px; width: fit-content; max-width: 100%; overflow-x: auto;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-sm); scrollbar-width: none; }
+.tab { all: unset; cursor: pointer; position: relative; display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px;
+  border-radius: 9px; color: var(--text-2); font-weight: 550; font-size: 13px; white-space: nowrap;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease); }
+.tab svg { width: 15px; height: 15px; }
+.tab:hover { color: var(--text); background: var(--surface-2); }
+.tab.active { color: var(--accent); background: var(--accent-soft); }
+.tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tab-dot { position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: var(--bad); }
+.tab-body { min-height: 300px; }
+.tab-body > div > :first-child > .section-title:first-child { margin-top: 0; }
+.update-box { padding: 14px 16px; border-radius: var(--radius-sm); background: var(--accent-soft); }
+.backup-row { display: flex; gap: 10px; align-items: center; padding: 9px 0; border-top: 1px solid var(--border); }
+.backup-row:first-child { border-top: 0; }
+.backup-row svg { width: 16px; height: 16px; color: var(--ok); flex: none; }
+.notes { display: grid; gap: 8px; }
+.notes .bullets { display: grid; gap: 5px; }
+.notes code { font-family: var(--mono); font-size: 12px; background: var(--surface-2); padding: 1px 5px; border-radius: 5px; }
+.updating { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; background: var(--overlay);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); animation: fade var(--t) var(--ease) both; }
+.updating .card { width: min(420px, calc(100vw - 32px)); padding: 28px; gap: 10px; }
+.spinner { width: 34px; height: 34px; margin: 0 auto 4px; border-radius: 50%; border: 3px solid var(--accent-soft);
+  border-top-color: var(--accent); animation: spin 0.9s linear infinite; }
+@media (max-width: 760px) { .tab span { display: none; } .tab.active span { display: inline; } }

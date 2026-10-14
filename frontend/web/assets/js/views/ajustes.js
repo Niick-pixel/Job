@@ -1,25 +1,78 @@
-// ⚙️ Ajustes: apariencia, claves API, modelo de IA, Gmail y versión.
+// ⚙️ Ajustes por pestañas: General, IA y gasto, Claves API, Conexiones, Actualizaciones y Tus datos.
 import { api } from "../api.js";
 import { bookmarkletCode, bookmarkletHref } from "../bookmarklet.js";
 import { THEMES, setMotion, setTheme } from "../theme.js";
 import { button, field, h, icon, pageHead, stagger, toast, toggle } from "../ui.js";
+import { checkNow, openWhatsNew, renderNotes, showUpdateButton, startUpdate } from "../updates.js";
+
+const TABS = [
+  ["general", "General", "settings", "Estado de la app y apariencia"],
+  ["ia", "IA y gasto", "sparkles", "Modelo de Claude, gasto del mes y tope"],
+  ["claves", "Claves API", "key", "Claude, Adzuna y otras claves"],
+  ["conexiones", "Conexiones", "link", "Gmail y navegador"],
+  ["actualizaciones", "Actualizaciones", "arrowUp", "Versión, buscar actualizaciones y novedades"],
+  ["datos", "Tus datos", "shield", "Copias de seguridad, exportar y carpeta de datos"],
+];
+// Destino de los botones del diagnóstico («Añadir clave» → pestaña Claves…)
+const ANCHOR_TAB = { claves: "claves", gmail: "conexiones", gasto: "ia", estado: "general", ideal: null };
+
+const currentTab = () => {
+  const t = (location.hash.match(/^#\/ajustes\/([\w-]+)/) || [])[1];
+  return TABS.some(([id]) => id === t) ? t : "general";
+};
 
 export async function render(root, ctx) {
-  const [keys, ai, gmail, version, diag, spend] = await Promise.all([
-    api.get("/api/settings/keys"), api.get("/api/settings/ai"), api.get("/api/settings/gmail"), api.get("/api/system/version"),
-    api.get("/api/status/diagnostics").catch(() => null), api.get("/api/status/spend").catch(() => null),
-  ]);
-  root.replaceChildren(stagger(h("div", {},
-    pageHead("Ajustes", "Todo se guarda solo en tu Mac"),
-    diag ? statusSection(diag, ctx) : null,
-    spend ? spendSection(spend, root, ctx) : null,
-    appearance(),
-    keysSection(keys, root, ctx),
-    customKeys(keys, root, ctx),
-    aiSection(ai),
-    browserSection(),
-    gmailSection(gmail, root, ctx),
-    about(version, keys))));
+  const tab = currentTab();
+  const nav = h("nav", { class: "tabs", role: "tablist" }, TABS.map(([id, label, ico, hint]) =>
+    h("button", { type: "button", role: "tab", class: `tab ${id === tab ? "active" : ""}`, "aria-selected": String(id === tab),
+      "data-tab": id, title: hint, onClick: () => switchTab(id, root, ctx) }, icon(ico), h("span", {}, label))));
+  const body = h("div", { class: "tab-body" }, skeletonsLite());
+  root.replaceChildren(pageHead("Ajustes", "Todo se guarda solo en tu Mac"), nav, body);
+  await renderTab(tab, body, root, ctx);
+  // punto en «General» si el diagnóstico encuentra algo roto
+  api.get("/api/status/diagnostics").then((d) => {
+    if (d?.summary.error) nav.querySelector('[data-tab="general"]').append(h("i", { class: "tab-dot" }));
+  }).catch(() => {});
+}
+
+function skeletonsLite() {
+  return h("div", { class: "stack" }, h("div", { class: "skeleton skeleton-card" }), h("div", { class: "skeleton skeleton-card" }));
+}
+
+async function switchTab(id, root, ctx) {
+  history.replaceState(null, "", `#/ajustes/${id}`);  // sin recargar toda la vista
+  root.querySelectorAll(".tab").forEach((b) => {
+    b.classList.toggle("active", b.dataset.tab === id);
+    b.setAttribute("aria-selected", String(b.dataset.tab === id));
+  });
+  const body = root.querySelector(".tab-body");
+  body.replaceChildren(skeletonsLite());
+  await renderTab(id, body, root, ctx);
+}
+
+async function renderTab(tab, body, root, ctx) {
+  const go = (id) => switchTab(id, root, ctx);
+  let parts = [];
+  if (tab === "general") {
+    const diag = await api.get("/api/status/diagnostics").catch(() => null);
+    parts = [diag ? statusSection(diag, ctx, go) : null, appearance()];
+  } else if (tab === "ia") {
+    const [ai, spend] = await Promise.all([api.get("/api/settings/ai"), api.get("/api/status/spend").catch(() => null)]);
+    parts = [aiSection(ai), spend ? spendSection(spend, root, ctx) : null];
+  } else if (tab === "claves") {
+    const keys = await api.get("/api/settings/keys");
+    parts = [keysSection(keys, root, ctx), customKeys(keys, root, ctx),
+      h("p", { class: "faint small center", style: { marginTop: "14px" } }, keys.keychain ? "Las claves viven en el Llavero de macOS; la configuración, en " : "Claves en ",
+        h("code", { style: { fontFamily: "var(--mono)" } }, keys.path))];
+  } else if (tab === "conexiones") {
+    const gmail = await api.get("/api/settings/gmail");
+    parts = [gmailSection(gmail, root, ctx), browserSection()];
+  } else if (tab === "actualizaciones") {
+    parts = [updatesSection(await api.get("/api/system/version"), root, ctx)];
+  } else if (tab === "datos") {
+    parts = [dataSection(await api.get("/api/system/data"), root, ctx)];
+  }
+  body.replaceChildren(stagger(h("div", {}, ...parts.filter(Boolean))));
 }
 
 const section = (title, ...children) => h("div", {}, h("h2", { class: "section-title" }, title), ...children);
@@ -29,7 +82,7 @@ const usd = (n) => `${Number(n || 0).toLocaleString("es-CR", { minimumFractionDi
 // ── Estado (diagnóstico) ─────────────────────────────────────────
 const STATUS_ICON = { ok: ["ok", "check"], warn: ["warn", "alert"], error: ["bad", "x"], off: ["", "clock"] };
 
-function statusSection(d, ctx) {
+function statusSection(d, ctx, go) {
   const problems = d.summary.error + d.summary.warn;
   const rows = d.checks.map((c) => {
     const [kind, ico] = STATUS_ICON[c.status];
@@ -37,7 +90,7 @@ function statusSection(d, ctx) {
       h("span", { class: `diag-ico ${kind}` }, icon(ico)),
       h("div", { style: { flex: 1, minWidth: 0 } }, h("b", {}, c.label), h("p", { class: "muted small" }, c.detail)),
       c.action ? button(c.action.label, { size: "sm", onClick: () => {
-        if (c.action.route === "ajustes" && c.action.anchor) document.getElementById(`sec-${c.action.anchor}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+        if (c.action.route === "ajustes" && ANCHOR_TAB[c.action.anchor]) go(ANCHOR_TAB[c.action.anchor]);
         else ctx.go(c.action.route);
       } }) : null);
   });
@@ -190,8 +243,9 @@ function customKeys(data, root, ctx) {
     } })));
   return section("Otras claves",
     h("section", { class: "card stack" },
-      h("p", { class: "muted small" }, "Añade cualquier otra clave o variable para futuras integraciones. Se guarda en ",
-        h("code", { style: { fontFamily: "var(--mono)" } }, ".env"), " con permisos privados y nunca se muestra completa."),
+      h("p", { class: "muted small" }, data.keychain
+        ? "Añade cualquier otra clave para futuras integraciones. Se guarda cifrada en el Llavero de macOS y nunca se muestra completa."
+        : "Añade cualquier otra clave para futuras integraciones. Se guarda con permisos privados y nunca se muestra completa."),
       rows.length ? h("div", {}, rows) : null,
       h("div", { class: "row", style: { flexWrap: "nowrap" } }, name, secret,
         button("Añadir", { kind: "primary", ico: "plus", onClick: async () => {
@@ -299,15 +353,89 @@ function gmailSection(g, root, ctx) {
 }
 
 // ── Acerca de ────────────────────────────────────────────────────
-function about(v, keys) {
-  return section("Acerca de",
-    h("section", { class: "card center" },
-      h("p", { style: { fontWeight: 600 } }, `JobTracker AI ${v.version}`),
-      h("p", { class: "faint small", style: { marginTop: "4px" } },
-        v.installed ? (v.auto_update ? "Se actualiza sola cada 6 horas · actualizaciones firmadas" : "Actualizaciones automáticas desactivadas") : "Modo desarrollo"),
-      v.update_available ? h("div", { style: { marginTop: "12px" } }, button(`Actualizar a ${v.latest}`, { kind: "primary", ico: "arrowUp", onClick: async () => {
-        await api.post("/api/system/update");
-        toast("Actualizando… la app se reiniciará sola");
-      } })) : null,
-      h("p", { class: "faint small", style: { marginTop: "10px" } }, "Claves en ", h("code", { style: { fontFamily: "var(--mono)" } }, keys.path))));
+// ── Actualizaciones ──────────────────────────────────────────────
+const ago = (iso) => {
+  if (!iso) return "nunca";
+  const m = Math.round((Date.now() - Date.parse(iso)) / 60000);
+  return m < 1 ? "ahora mismo" : m < 60 ? `hace ${m} min` : m < 48 * 60 ? `hace ${Math.round(m / 60)} h` : `hace ${Math.round(m / 1440)} días`;
+};
+
+function updatesSection(v, root, ctx) {
+  const status = h("div");
+  const draw = (info) => {
+    showUpdateButton(info);
+    status.replaceChildren(info.update_available
+      ? h("div", { class: "update-box" },
+        h("div", { class: "row between" },
+          h("div", {}, h("p", { style: { fontWeight: 650 } }, `Versión ${info.latest} disponible`),
+            h("p", { class: "muted small" }, `Tienes la ${info.version}. Se instala en un minuto y la app se reinicia sola.`)),
+          button(`Actualizar a ${info.latest}`, { kind: "primary", ico: "arrowUp", onClick: () => startUpdate(info.latest) })),
+        info.notes ? h("details", { style: { marginTop: "10px" } }, h("summary", { class: "small" }, "Qué trae"), renderNotes(info.notes)) : null)
+      : h("p", { class: "row", style: { gap: "8px" } }, h("span", { class: "diag-ico ok" }, icon("check")),
+        h("span", {}, h("b", {}, "Estás al día"), h("span", { class: "muted" }, ` · comprobado ${ago(info.last_check)}`))));
+  };
+  const check = button("Buscar actualizaciones", { ico: "refresh", onClick: async (_, b) => {
+    b.querySelector("span").textContent = "Comprobando…";
+    try {
+      const info = await checkNow();
+      draw(info);
+      toast(info.update_available ? `Hay una versión nueva: ${info.latest}` : "Estás al día");
+    } finally { b.querySelector("span").textContent = "Buscar actualizaciones"; }
+  } });
+  const auto = toggle(v.auto_update !== false, async (on) => {
+    try { await api.post("/api/system/auto-update", { enabled: on }); toast(on ? "Se actualizará sola" : "Te avisaremos y actualizarás tú"); }
+    catch (e) { toast(e.message, "error"); auto.input.checked = !on; }
+  });
+  if (!v.installed) {
+    return section("Actualizaciones", h("section", { class: "card stack" },
+      h("p", {}, h("b", {}, `JobTracker AI ${v.version}`), h("span", { class: "muted" }, " · modo desarrollo")),
+      h("p", { class: "muted small" }, "En la app instalada aquí puedes buscar e instalar actualizaciones."),
+      h("div", { class: "row" }, button("Novedades de esta versión", { ico: "sparkles", onClick: () => openWhatsNew() }))));
+  }
+  draw(v);
+  return section("Actualizaciones", h("section", { class: "card stack" },
+    h("div", { class: "row between" },
+      h("div", {}, h("p", { style: { fontWeight: 650, fontSize: "18px" } }, `JobTracker AI ${v.version}`),
+        h("p", { class: "faint small" }, "Actualizaciones firmadas: solo se instalan si la firma es auténtica")),
+      h("div", { class: "row" }, check, button("Novedades", { ico: "sparkles", kind: "ghost", onClick: () => openWhatsNew() }))),
+    status,
+    v.rolled_back_from ? h("p", { class: "chip warn", style: { height: "auto", padding: "6px 10px", whiteSpace: "normal" } },
+      icon("alert"), `La versión ${v.rolled_back_from} no arrancó bien y se volvió a la ${v.version} automáticamente.`) : null,
+    h("hr", { class: "divider", style: { margin: "4px 0" } }),
+    h("div", { class: "row between" },
+      h("div", { style: { flex: "1 1 260px", minWidth: 0 } }, h("p", { style: { fontWeight: 550 } }, "Actualizar automáticamente"),
+        h("p", { class: "faint small" }, "Comprueba cada hora y al abrir la app. Si lo desactivas, te avisamos y tú decides cuándo.")),
+      auto)));
 }
+
+// ── Tus datos ────────────────────────────────────────────────────
+function dataSection(d, root, ctx) {
+  const list_ = h("div", { class: "stack", style: { gap: "0" } }, d.backups.length ? d.backups.map((b) =>
+    h("div", { class: "backup-row" }, icon("shield"),
+      h("span", { style: { flex: 1, minWidth: 0 } }, h("b", {}, new Date(b.created_at).toLocaleString("es-CR", { dateStyle: "medium", timeStyle: "short" })),
+        h("span", { class: "faint small" }, ` · ${backupKind(b.name)} · ${b.size_kb} KB`))))
+    : h("p", { class: "muted small" }, "Aún no hay copias: se hace una sola antes de cada actualización y otra cada semana."));
+  return h("div", {},
+    section("Copias de seguridad", h("section", { class: "card stack" },
+      h("p", { class: "muted small" }, "Automáticas antes de cada actualización y una vez por semana (se guardan las 8 últimas)."),
+      list_,
+      h("div", { class: "row" },
+        button("Hacer una copia ahora", { ico: "download", onClick: async () => {
+          const info = await api.post("/api/system/backups");
+          toast("Copia hecha");
+          root.querySelector(".tab-body").replaceChildren(stagger(h("div", {}, dataSection(info, root, ctx))));
+        } }),
+        d.can_reveal ? button("Abrir la carpeta", { ico: "external", kind: "ghost", onClick: () => api.post("/api/system/reveal") }) : null),
+      h("p", { class: "faint small" }, "Para restaurar una copia: cierra la app y en Terminal ejecuta ",
+        h("code", { style: { fontFamily: "var(--mono)" } }, "~/.local/bin/jobtracker restore-db"), "."))),
+    section("Exportar", h("section", { class: "card row between" },
+      h("div", {}, h("p", { style: { fontWeight: 550 } }, "Tus candidaturas en CSV"),
+        h("p", { class: "faint small" }, "Para Excel o Numbers: útil como registro de búsqueda activa.")),
+      h("a", { class: "btn", href: "/api/applications/export.csv", download: "" }, icon("download"), h("span", {}, "Exportar CSV")))),
+    section("Dónde están tus datos", h("section", { class: "card stack" },
+      h("p", { class: "small" }, h("code", { style: { fontFamily: "var(--mono)" } }, d.data_dir)),
+      h("p", { class: "faint small" }, `Base de datos: ${(d.db_size_kb / 1024).toFixed(1).replace(".", ",")} MB. Todo se queda en tu Mac; a Claude solo se envía el texto necesario para cada análisis.`))));
+}
+
+const backupKind = (name) => name.includes("antes-de-") ? `antes de la ${name.split("antes-de-")[1].replace(/(-\d+)?\.db$/, "")}`
+  : name.includes("semanal") ? "semanal" : name.includes("manual") ? "manual" : name.includes("antes-de-restaurar") ? "antes de restaurar" : "copia";
